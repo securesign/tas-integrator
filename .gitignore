@@ -1,0 +1,8 @@
+.claude/worktrees/
+.env
+.sdlc/
+.serena/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
