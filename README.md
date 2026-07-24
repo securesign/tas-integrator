@@ -54,28 +54,22 @@ tas-integrator/
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and
   authenticated.
 
-### Install from GitHub
-
-```bash
-claude plugin add --from-gh securesign/tas-integrator
-```
-
-### Install from a Local Clone
+### Load from a Local Clone
 
 ```bash
 git clone https://github.com/securesign/tas-integrator.git
-claude plugin add ./tas-integrator
+claude --plugin-dir ./tas-integrator
 ```
 
-### Verify Installation
+This loads the plugin for the duration of the session. To load it
+automatically on every session, add it to your
+[settings](https://docs.anthropic.com/en/docs/claude-code/settings):
 
-After installing, confirm the plugin is registered:
-
-```bash
-claude plugin list
+```json
+{
+  "plugins": ["./tas-integrator"]
+}
 ```
-
-You should see `tas-integrator` in the output.
 
 ## Template Placeholder Convention
 
