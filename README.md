@@ -16,13 +16,13 @@ checklist.
 
 | Platform   | Blueprint Template              | Status |
 |------------|---------------------------------|--------|
-| Jenkins    | `shared/templates/jenkins-blueprint.md`    | Available |
-| GitLab CI  | `shared/templates/gitlab-ci-blueprint.md`  | Available |
+| Jenkins   | `plugins/tas-integrator/shared/templates/jenkins-blueprint.md`   | Available |
+| GitLab CI | `plugins/tas-integrator/shared/templates/gitlab-ci-blueprint.md` | Available |
 
 ### Blueprint Structure
 
 Every generated blueprint starts with a common header
-(`shared/templates/blueprint-header.md`) containing:
+(`plugins/tas-integrator/shared/templates/blueprint-header.md`) containing:
 
 - Scan metadata (timestamp, environment type, CI/CD platform, agent version)
 - Confidence scores (overall, detection, compatibility)
@@ -33,17 +33,21 @@ instructions.
 
 ## Directory Layout
 
-```
+```text
 tas-integrator/
   .claude-plugin/
-    plugin.json            # Plugin manifest
-  shared/
-    knowledge-base/        # Reference material for scanner logic
-    templates/             # Blueprint markdown templates
-      blueprint-header.md
-      jenkins-blueprint.md
-      gitlab-ci-blueprint.md
-  skills/                  # Claude Code skill definitions
+    marketplace.json         # Marketplace manifest
+  plugins/
+    tas-integrator/
+      .claude-plugin/
+        plugin.json          # Plugin manifest
+      shared/
+        knowledge-base/      # Reference material for scanner logic
+        templates/           # Blueprint markdown templates
+          blueprint-header.md
+          jenkins-blueprint.md
+          gitlab-ci-blueprint.md
+      skills/                # Claude Code skill definitions
   README.md
 ```
 
@@ -54,20 +58,35 @@ tas-integrator/
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and
   authenticated.
 
-### Load from a Local Clone
+### Option 1: Install from Marketplace (recommended)
+
+First, register the marketplace (one-time):
+
+```bash
+claude plugin marketplace add securesign/tas-integrator
+```
+
+Then install the plugin:
+
+```bash
+claude plugin install tas-integrator
+```
+
+### Option 2: Load from a Local Clone
 
 ```bash
 git clone https://github.com/securesign/tas-integrator.git
-claude --plugin-dir ./tas-integrator
+claude --plugin-dir ./tas-integrator/plugins/tas-integrator
 ```
 
 This loads the plugin for the duration of the session. To load it
-automatically on every session, add it to your
-[settings](https://docs.anthropic.com/en/docs/claude-code/settings):
+automatically on every session, add the path to your
+[settings](https://docs.anthropic.com/en/docs/claude-code/settings)
+(`~/.claude/settings.json` or `.claude/settings.json`):
 
 ```json
 {
-  "plugins": ["./tas-integrator"]
+  "plugins": ["./tas-integrator/plugins/tas-integrator"]
 }
 ```
 
