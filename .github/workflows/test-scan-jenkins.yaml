@@ -1,0 +1,54 @@
+name: test-scan-jenkins
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/tas-integrator/skills/scan-jenkins/**'
+      - 'plugins/tas-integrator/shared/knowledge-base/**'
+      - 'plugins/tas-integrator/shared/templates/jenkins-blueprint.md'
+      - 'tests/scan-jenkins/**'
+      - '.github/workflows/test-scan-jenkins.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/tas-integrator/skills/scan-jenkins/**'
+      - 'tests/scan-jenkins/**'
+
+jobs:
+  scan-jenkins-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Jenkins test image
+        run: docker build -t tas-test-jenkins tests/scan-jenkins/
+
+      - name: Start Jenkins
+        run: |
+          docker run -d --name tas-test-jenkins -p 8080:8080 tas-test-jenkins
+          echo "Waiting for Jenkins to be ready..."
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" -u admin:admin123 http://localhost:8080/api/json 2>/dev/null)
+            if [ "$STATUS" = "200" ]; then
+              echo "Jenkins is ready (attempt $i)"
+              break
+            fi
+            echo "Attempt $i: HTTP $STATUS"
+            sleep 5
+          done
+
+      - name: Create test pipeline job
+        run: bash tests/scan-jenkins/seed-job.sh
+
+      - name: Run scan-jenkins validation
+        run: bash tests/scan-jenkins/test-scan-jenkins.sh
+
+      - name: Jenkins logs
+        if: failure()
+        run: docker logs tas-test-jenkins
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f tas-test-jenkins || true
