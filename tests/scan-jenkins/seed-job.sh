@@ -8,7 +8,7 @@ JENKINS_PASS="${JENKINS_PASS:-admin123}"
 
 CRUMB=$(curl -s -u "${JENKINS_USER}:${JENKINS_PASS}" \
   "${JENKINS_URL}/crumbIssuer/api/json" | \
-  python3 -c "import sys,json; d=json.load(sys.stdin); print(d['crumbRequestField']+':'+d['crumb'])" 2>/dev/null)
+  python3 -c "import sys,json; d=json.load(sys.stdin); print(d['crumbRequestField']+':'+d['crumb'])" 2>/dev/null || true)
 
 CRUMB_HEADER=""
 if [ -n "$CRUMB" ]; then

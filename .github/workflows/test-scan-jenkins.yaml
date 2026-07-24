@@ -30,7 +30,7 @@ jobs:
           docker run -d --name tas-test-jenkins -p 8080:8080 tas-test-jenkins
           echo "Waiting for Jenkins to be ready..."
           for i in $(seq 1 30); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" -u admin:admin123 http://localhost:8080/api/json 2>/dev/null)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" -u admin:admin123 http://localhost:8080/api/json 2>/dev/null || true)
             if [ "$STATUS" = "200" ]; then
               echo "Jenkins is ready (attempt $i)"
               break
