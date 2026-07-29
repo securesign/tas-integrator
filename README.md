@@ -14,10 +14,10 @@ checklist.
 
 ### Supported Platforms
 
-| Platform   | Blueprint Template              | Status |
-|------------|---------------------------------|--------|
-| Jenkins   | `plugins/tas-integrator/shared/templates/jenkins-blueprint.md`   | Available |
-| GitLab CI | `plugins/tas-integrator/shared/templates/gitlab-ci-blueprint.md` | Available |
+| Platform  | Blueprint Template                | Status    |
+|-----------|-----------------------------------|-----------|
+| Jenkins   | `jenkins-blueprint.md`            | Available |
+| GitLab CI | `gitlab-ci-blueprint.md`          | Available |
 
 ### Blueprint Structure
 
@@ -88,6 +88,53 @@ automatically on every session, add the path to your
 {
   "plugins": ["./tas-integrator/plugins/tas-integrator"]
 }
+```
+
+## Quick Start
+
+Once the plugin is installed, invoke the scanner skill in any Claude Code session:
+
+```bash
+/tas-integrator:scan-jenkins
+
+jenkins_url: http://localhost:8080
+jenkins_user: admin
+jenkins_token: <your-api-token>
+```
+
+The skill walks through 10 steps — connect, plugins, pipelines, credentials,
+endpoints, gap rules, confidence, blueprint assembly, review, and export — then
+generates a TAS integration blueprint.
+
+### Required Parameters
+
+| Parameter            | Description                        |
+|----------------------|------------------------------------|
+| `jenkins_url`        | Jenkins server base URL            |
+
+### Optional Parameters
+
+| Parameter            | Description                        |
+|----------------------|------------------------------------|
+| `jenkins_user`       | Username for Jenkins API auth      |
+| `jenkins_token`      | API token or password              |
+| `rekor_url`          | Override Rekor endpoint URL        |
+| `fulcio_url`         | Override Fulcio endpoint URL       |
+| `tuf_url`            | Override TUF endpoint URL          |
+| `tsa_url`            | Override TSA endpoint URL          |
+| `oidc_issuer`        | Override OIDC issuer               |
+| `oidc_client_id`     | Override OIDC client ID            |
+| `namespace`          | K8s namespace for TAS auto-detect  |
+| `output`             | `display` (default), `save`, `both`|
+| `format`             | `markdown` (default) or `yaml`     |
+| `output_path`        | File path for `save` or `both`     |
+
+### Export Blueprint
+
+To re-render a blueprint from previously collected scan data:
+
+```bash
+/tas-integrator:export-blueprint --output=save --format=markdown
 ```
 
 ## Template Placeholder Convention
