@@ -92,7 +92,9 @@ automatically on every session, add the path to your
 
 ## Quick Start
 
-Once the plugin is installed, invoke the scanner skill in any Claude Code session:
+Once the plugin is installed, invoke a scanner skill in any Claude Code session.
+
+### Jenkins
 
 ```bash
 /tas-integrator:scan-jenkins
@@ -102,17 +104,13 @@ jenkins_user: admin
 jenkins_token: <your-api-token>
 ```
 
-The skill walks through 10 steps — connect, plugins, pipelines, credentials,
-endpoints, gap rules, confidence, blueprint assembly, review, and export — then
-generates a TAS integration blueprint.
-
-### Required Parameters
+#### Required Parameters
 
 | Parameter            | Description                        |
 |----------------------|------------------------------------|
 | `jenkins_url`        | Jenkins server base URL            |
 
-### Optional Parameters
+#### Optional Parameters
 
 | Parameter            | Description                        |
 |----------------------|------------------------------------|
@@ -128,6 +126,47 @@ generates a TAS integration blueprint.
 | `output`             | `display` (default), `save`, `both`|
 | `format`             | `markdown` (default) or `yaml`     |
 | `output_path`        | File path for `save` or `both`     |
+
+### GitLab CI
+
+```bash
+/tas-integrator:scan-gitlab
+
+gitlab_url: https://gitlab.com
+token: glpat-xxxxxxxxxxxx
+project_id: 12345678
+```
+
+#### Required GitLab Parameters
+
+| Parameter            | Description                        |
+|----------------------|------------------------------------|
+| `gitlab_url`         | GitLab instance base URL           |
+
+#### Optional GitLab Parameters
+
+| Parameter            | Description                        |
+|----------------------|------------------------------------|
+| `token`              | Personal access token (`read_api`) |
+| `project_id`         | Numeric project ID to scan         |
+| `group_id`           | Numeric group ID to scan           |
+| `rekor_url`          | Override Rekor endpoint URL        |
+| `fulcio_url`         | Override Fulcio endpoint URL       |
+| `tuf_url`            | Override TUF endpoint URL          |
+| `tsa_url`            | Override TSA endpoint URL          |
+| `oidc_issuer`        | Override OIDC issuer               |
+| `oidc_client_id`     | Override OIDC client ID            |
+| `namespace`          | K8s namespace for TAS auto-detect  |
+| `output`             | `display` (default), `save`, `both`|
+| `format`             | `markdown` (default) or `yaml`     |
+| `output_path`        | File path for `save` or `both`     |
+
+### Common Workflow
+
+Each scanner skill walks through 10 steps — connect, discover runners/plugins,
+scan pipelines, scan credentials/variables, detect TAS endpoints, evaluate gap
+rules, compute confidence scores, assemble blueprint, review, and export — then
+generates a TAS integration blueprint.
 
 ### Export Blueprint
 
