@@ -7,6 +7,16 @@ JENKINS_USER="${JENKINS_USER:-admin}"
 JENKINS_PASS="${JENKINS_PASS:-admin123}"
 MOCK_TAS_URL="${MOCK_TAS_URL:-http://localhost:8090}"
 
+TAS_FULCIO_URL="${TAS_FULCIO_URL:-${MOCK_TAS_URL}/fulcio}"
+TAS_REKOR_URL="${TAS_REKOR_URL:-${MOCK_TAS_URL}/rekor}"
+TAS_TSA_URL="${TAS_TSA_URL:-${MOCK_TAS_URL}/tsa}"
+TAS_TUF_URL="${TAS_TUF_URL:-${MOCK_TAS_URL}/tuf}"
+TAS_OIDC_ISSUER="${TAS_OIDC_ISSUER:-${MOCK_TAS_URL}/oidc}"
+TAS_OIDC_CLIENT_ID="${TAS_OIDC_CLIENT_ID:-trusted-artifact-signer}"
+OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-mock-oidc-secret}"
+REGISTRY_USER="${REGISTRY_USER:-robot-user}"
+REGISTRY_PASS="${REGISTRY_PASS:-mock-registry-token}"
+
 CRUMB=$(curl -s -u "${JENKINS_USER}:${JENKINS_PASS}" \
   "${JENKINS_URL}/crumbIssuer/api/json" | \
   python3 -c "import sys,json; d=json.load(sys.stdin); print(d['crumbRequestField']+':'+d['crumb'])" 2>/dev/null || true)
@@ -30,13 +40,13 @@ pipeline {
         REGISTRY = 'quay.io/myorg'
         IMAGE_NAME = 'my-app'
         IMAGE_TAG = "\${BUILD_NUMBER}"
-        TAS_FULCIO_URL = '${MOCK_TAS_URL}/fulcio'
-        TAS_REKOR_URL = '${MOCK_TAS_URL}/rekor'
-        TAS_TSA_URL = '${MOCK_TAS_URL}/tsa'
-        TAS_TUF_URL = '${MOCK_TAS_URL}/tuf'
-        TAS_OIDC_ISSUER = '${MOCK_TAS_URL}/oidc'
-        TAS_OIDC_CLIENT_ID = 'trusted-artifact-signer'
-        COSIGN_REKOR_URL = '${MOCK_TAS_URL}/rekor'
+        TAS_FULCIO_URL = '${TAS_FULCIO_URL}'
+        TAS_REKOR_URL = '${TAS_REKOR_URL}'
+        TAS_TSA_URL = '${TAS_TSA_URL}'
+        TAS_TUF_URL = '${TAS_TUF_URL}'
+        TAS_OIDC_ISSUER = '${TAS_OIDC_ISSUER}'
+        TAS_OIDC_CLIENT_ID = '${TAS_OIDC_CLIENT_ID}'
+        COSIGN_REKOR_URL = '${TAS_REKOR_URL}'
     }
 
     stages {
@@ -129,12 +139,12 @@ curl -s -u "${JENKINS_USER}:${JENKINS_PASS}" \
 echo ""
 
 # --- Create OIDC client secret credential ---
-cat <<'CREDXML' > /tmp/oidc-cred.xml
+cat <<CREDXML > /tmp/oidc-cred.xml
 <org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>
   <scope>GLOBAL</scope>
   <id>oidc-client-secret</id>
   <description>Keycloak OIDC client secret for TAS</description>
-  <secret>mock-oidc-secret</secret>
+  <secret>${OIDC_CLIENT_SECRET}</secret>
 </org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>
 CREDXML
 
@@ -148,13 +158,13 @@ curl -s -u "${JENKINS_USER}:${JENKINS_PASS}" \
 echo ""
 
 # --- Create registry credentials ---
-cat <<'CREDXML' > /tmp/registry-cred.xml
+cat <<CREDXML > /tmp/registry-cred.xml
 <com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
   <scope>GLOBAL</scope>
   <id>registry-credentials</id>
   <description>Quay registry push credentials</description>
-  <username>robot-user</username>
-  <password>mock-registry-token</password>
+  <username>${REGISTRY_USER}</username>
+  <password>${REGISTRY_PASS}</password>
 </com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
 CREDXML
 
