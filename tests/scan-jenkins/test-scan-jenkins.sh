@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
-set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/../shared/test-helpers.sh"
 
 JENKINS_URL="http://localhost:8080"
 JENKINS_USER="admin"
 JENKINS_PASS="admin123"
 AUTH="${JENKINS_USER}:${JENKINS_PASS}"
-PASS=0
-FAIL=0
-SKIP=0
-
-pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
-fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
-skip() { echo "  SKIP: $1"; SKIP=$((SKIP + 1)); }
 
 echo "=== Step 1: Connect to Jenkins ==="
 VERSION=$(curl -sI -u "$AUTH" "$JENKINS_URL/api/json" | grep -i "^x-jenkins:" | awk '{print $2}' | tr -d '\r')
@@ -128,15 +122,4 @@ pass "Detection confidence: Low (0/10 INFRA+OIDC rules passed)"
 pass "Compatibility confidence: Low (0/9 SIGN+VERIFY rules passed)"
 pass "Overall confidence: Low (0/24 rules passed)"
 
-echo ""
-echo "========================================="
-echo "RESULTS: $PASS passed, $FAIL failed, $SKIP skipped"
-echo "========================================="
-
-if [ "$FAIL" -gt 0 ]; then
-  echo "TEST SUITE: FAILED"
-  exit 1
-else
-  echo "TEST SUITE: PASSED"
-  exit 0
-fi
+report_results
