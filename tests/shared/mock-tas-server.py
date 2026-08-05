@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Lightweight mock TAS endpoint server for GitLab brownfield testing.
-Same as the Jenkins brownfield mock but on port 8090."""
+"""Lightweight mock TAS endpoint server for brownfield testing."""
 
 import json
 from http.server import HTTPServer, BaseHTTPRequestHandler

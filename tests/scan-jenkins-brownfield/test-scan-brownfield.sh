@@ -1,20 +1,14 @@
 #!/usr/bin/env bash
 # Brownfield test: validates scan-jenkins skill against a Jenkins instance
 # with TAS signing steps, credentials, and mock TAS endpoints.
-set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/../shared/test-helpers.sh"
 
 JENKINS_URL="http://localhost:8080"
 JENKINS_USER="admin"
 JENKINS_PASS="admin123"
 MOCK_TAS_URL="${MOCK_TAS_URL:-http://localhost:8090}"
 AUTH="${JENKINS_USER}:${JENKINS_PASS}"
-PASS=0
-FAIL=0
-SKIP=0
-
-pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
-fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
-skip() { echo "  SKIP: $1"; SKIP=$((SKIP + 1)); }
 
 echo "=== Step 1: Connect to Jenkins ==="
 VERSION=$(curl -sI -u "$AUTH" "$JENKINS_URL/api/json" | grep -i "^x-jenkins:" | awk '{print $2}' | tr -d '\r')
@@ -149,34 +143,7 @@ fi
 echo ""
 echo "=== Step 5: Detect TAS Endpoints ==="
 pass "TAS env vars found in pipeline (verified in Step 3)"
-
-FULCIO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${MOCK_TAS_URL}/fulcio/healthz" 2>/dev/null || true)
-if [ "$FULCIO_STATUS" = "200" ]; then
-  pass "Fulcio health check: HTTP 200"
-else
-  fail "Fulcio health check: HTTP $FULCIO_STATUS (expected 200)"
-fi
-
-REKOR_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${MOCK_TAS_URL}/rekor/api/v1/log" 2>/dev/null || true)
-if [ "$REKOR_STATUS" = "200" ]; then
-  pass "Rekor health check: HTTP 200"
-else
-  fail "Rekor health check: HTTP $REKOR_STATUS (expected 200)"
-fi
-
-TSA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${MOCK_TAS_URL}/tsa/api/v1/timestamp/certchain" 2>/dev/null || true)
-if [ "$TSA_STATUS" = "200" ]; then
-  pass "TSA health check: HTTP 200"
-else
-  fail "TSA health check: HTTP $TSA_STATUS (expected 200)"
-fi
-
-TUF_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${MOCK_TAS_URL}/tuf/root.json" 2>/dev/null || true)
-if [ "$TUF_STATUS" = "200" ]; then
-  pass "TUF health check: HTTP 200"
-else
-  fail "TUF health check: HTTP $TUF_STATUS (expected 200)"
-fi
+check_tas_endpoints "$MOCK_TAS_URL"
 
 echo ""
 echo "=== Step 6: Gap Rule Evaluation ==="
@@ -231,15 +198,4 @@ pass "Detection confidence: High (INFRA + OIDC rules pass)"
 pass "Compatibility confidence: High (SIGN + VERIFY rules pass)"
 pass "Overall confidence: Medium (SUPPLY + POLICY drag down overall score)"
 
-echo ""
-echo "========================================="
-echo "RESULTS: $PASS passed, $FAIL failed, $SKIP skipped"
-echo "========================================="
-
-if [ "$FAIL" -gt 0 ]; then
-  echo "TEST SUITE: FAILED"
-  exit 1
-else
-  echo "TEST SUITE: PASSED"
-  exit 0
-fi
+report_results

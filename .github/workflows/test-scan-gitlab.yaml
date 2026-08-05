@@ -9,6 +9,7 @@ on:
       - 'plugins/tas-integrator/shared/templates/gitlab-ci-blueprint.md'
       - 'tests/scan-gitlab/**'
       - 'tests/scan-gitlab-brownfield/**'
+      - 'tests/shared/**'
       - '.github/workflows/test-scan-gitlab.yaml'
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'plugins/tas-integrator/skills/scan-gitlab/**'
       - 'tests/scan-gitlab/**'
       - 'tests/scan-gitlab-brownfield/**'
+      - 'tests/shared/**'
 
 jobs:
   scan-gitlab-greenfield:
@@ -48,7 +50,7 @@ jobs:
 
       - name: Start mock TAS server
         run: |
-          python3 tests/scan-gitlab-brownfield/mock-tas-server.py &
+          python3 tests/shared/mock-tas-server.py &
           echo $! > /tmp/mock-tas.pid
           sleep 1
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8090/fulcio/healthz 2>/dev/null || true)

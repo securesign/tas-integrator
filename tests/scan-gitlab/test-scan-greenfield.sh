@@ -2,17 +2,11 @@
 # Greenfield test: validates scan-gitlab skill against a mock GitLab API
 # with a bare project — no TAS signing, no TAS variables, no runners.
 # Verifies the skill correctly detects missing TAS integration.
-set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/../shared/test-helpers.sh"
 
 GITLAB_URL="${GITLAB_URL:-http://localhost:8070}"
 PROJECT_ID="1"
-PASS=0
-FAIL=0
-SKIP=0
-
-pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
-fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
-skip() { echo "  SKIP: $1"; SKIP=$((SKIP + 1)); }
 
 echo "=== Step 1: Connect to GitLab ==="
 VERSION=$(curl -sf "$GITLAB_URL/api/v4/version" | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "")
@@ -119,15 +113,4 @@ pass "Detection confidence: Low (no INFRA or OIDC rules pass)"
 pass "Compatibility confidence: Low (no SIGN or VERIFY rules pass)"
 pass "Overall confidence: Low (no rules pass — full greenfield)"
 
-echo ""
-echo "========================================="
-echo "RESULTS: $PASS passed, $FAIL failed, $SKIP skipped"
-echo "========================================="
-
-if [ "$FAIL" -gt 0 ]; then
-  echo "TEST SUITE: FAILED"
-  exit 1
-else
-  echo "TEST SUITE: PASSED"
-  exit 0
-fi
+report_results

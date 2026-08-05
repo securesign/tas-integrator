@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
 # Brownfield test: validates scan-gitlab skill against a mock GitLab API
 # with TAS-integrated pipeline, CI/CD variables, and mock TAS endpoints.
-set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/../shared/test-helpers.sh"
 
 GITLAB_URL="${GITLAB_URL:-http://localhost:8070}"
 MOCK_TAS_URL="${MOCK_TAS_URL:-http://localhost:8090}"
 PROJECT_ID="1"
-PASS=0
-FAIL=0
-SKIP=0
-
-pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
-fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
-skip() { echo "  SKIP: $1"; SKIP=$((SKIP + 1)); }
 
 echo "=== Step 1: Connect to GitLab ==="
 VERSION=$(curl -sf "$GITLAB_URL/api/v4/version" | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "")
@@ -115,40 +109,7 @@ done
 
 echo ""
 echo "=== Step 5: Detect TAS Endpoints ==="
-FULCIO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${MOCK_TAS_URL}/fulcio/healthz" 2>/dev/null || true)
-if [ "$FULCIO_STATUS" = "200" ]; then
-  pass "Fulcio health check: HTTP 200"
-else
-  fail "Fulcio health check: HTTP $FULCIO_STATUS"
-fi
-
-REKOR_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${MOCK_TAS_URL}/rekor/api/v1/log" 2>/dev/null || true)
-if [ "$REKOR_STATUS" = "200" ]; then
-  pass "Rekor health check: HTTP 200"
-else
-  fail "Rekor health check: HTTP $REKOR_STATUS"
-fi
-
-TSA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${MOCK_TAS_URL}/tsa/api/v1/timestamp/certchain" 2>/dev/null || true)
-if [ "$TSA_STATUS" = "200" ]; then
-  pass "TSA health check: HTTP 200"
-else
-  fail "TSA health check: HTTP $TSA_STATUS"
-fi
-
-TUF_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${MOCK_TAS_URL}/tuf/root.json" 2>/dev/null || true)
-if [ "$TUF_STATUS" = "200" ]; then
-  pass "TUF health check: HTTP 200"
-else
-  fail "TUF health check: HTTP $TUF_STATUS"
-fi
-
-OIDC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${MOCK_TAS_URL}/oidc/.well-known/openid-configuration" 2>/dev/null || true)
-if [ "$OIDC_STATUS" = "200" ]; then
-  pass "OIDC discovery: HTTP 200"
-else
-  fail "OIDC discovery: HTTP $OIDC_STATUS"
-fi
+check_tas_endpoints "$MOCK_TAS_URL"
 
 echo ""
 echo "=== Step 6: Gap Rule Evaluation ==="
@@ -165,15 +126,4 @@ pass "Detection confidence: High (INFRA + OIDC rules pass)"
 pass "Compatibility confidence: High (SIGN + VERIFY rules pass)"
 pass "Overall confidence: Medium-High (SUPPLY gap drags slightly)"
 
-echo ""
-echo "========================================="
-echo "RESULTS: $PASS passed, $FAIL failed, $SKIP skipped"
-echo "========================================="
-
-if [ "$FAIL" -gt 0 ]; then
-  echo "TEST SUITE: FAILED"
-  exit 1
-else
-  echo "TEST SUITE: PASSED"
-  exit 0
-fi
+report_results
