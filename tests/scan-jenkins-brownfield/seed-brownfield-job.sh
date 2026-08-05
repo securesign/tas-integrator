@@ -103,7 +103,7 @@ pipeline {
                                 --rekor-url=\${TAS_REKOR_URL} \\
                                 --oidc-issuer=\${TAS_OIDC_ISSUER} \\
                                 --oidc-client-id=\${TAS_OIDC_CLIENT_ID} \\
-                                --identity-token=${IDENTITY_TOKEN} \\
+                                --identity-token=\${IDENTITY_TOKEN} \\
                                 --yes \\
                                 \${REGISTRY}/\${IMAGE_NAME}:\${IMAGE_TAG}
                         """
