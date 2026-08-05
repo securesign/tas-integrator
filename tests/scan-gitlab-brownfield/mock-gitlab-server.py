@@ -44,7 +44,7 @@ sign-image:
   image: registry.redhat.io/rhtas/cosign-rhel9:latest
   id_tokens:
     SIGSTORE_ID_TOKEN:
-      aud: sigstore
+      aud: trusted-artifact-signer
   script:
     - cosign initialize
         --mirror=${TAS_TUF_URL}
@@ -53,7 +53,7 @@ sign-image:
         --fulcio-url=${TAS_FULCIO_URL}
         --rekor-url=${TAS_REKOR_URL}
         --oidc-issuer=${TAS_OIDC_ISSUER}
-        --oidc-client-id=sigstore
+        --oidc-client-id=trusted-artifact-signer
         --identity-token=${SIGSTORE_ID_TOKEN}
         --yes
         ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
@@ -96,7 +96,7 @@ VARIABLES = [
     {"key": "TAS_OIDC_ISSUER", "value": f"{MOCK_TAS_URL}/oidc",
      "variable_type": "env_var", "protected": False, "masked": False,
      "environment_scope": "*"},
-    {"key": "TAS_OIDC_CLIENT_ID", "value": "sigstore",
+    {"key": "TAS_OIDC_CLIENT_ID", "value": "trusted-artifact-signer",
      "variable_type": "env_var", "protected": False, "masked": False,
      "environment_scope": "*"},
     {"key": "COSIGN_REKOR_URL", "value": f"{MOCK_TAS_URL}/rekor",

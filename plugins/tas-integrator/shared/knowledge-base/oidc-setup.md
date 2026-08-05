@@ -41,7 +41,7 @@ From Fulcio `pkg/config/config.go`, each OIDC issuer entry includes:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `IssuerURL` | Yes | The OIDC discovery URL (e.g., `https://keycloak.example.com/realms/sigstore`) |
+| `IssuerURL` | Yes | The OIDC discovery URL (e.g., `https://keycloak.example.com/realms/trusted-artifact-signer`) |
 | `ClientID` | Yes | Expected `aud` claim value in the identity token |
 | `Type` | Yes | Issuer type — determines SAN extraction (see table above) |
 | `CIProvider` | No | Maps token claims to certificate extensions for CI workflows |
@@ -87,11 +87,16 @@ type FulcioConfig struct {
 | Setting | Value | Notes |
 |---------|-------|-------|
 | Realm URL | `https://{{keycloak_host}}/realms/{{realm_name}}` | OIDC discovery at `/.well-known/openid-configuration` |
-| Client ID | `sigstore` (typical) | Must match Fulcio `ClientID` |
+| Client ID | `trusted-artifact-signer` | Must match Fulcio `ClientID` |
 | Client Protocol | `openid-connect` | Standard OIDC |
-| Access Type | `public` | No client secret needed for token exchange |
-| Valid Redirect URIs | `http://localhost/*` | For interactive cosign login |
+| Access Type | `public` | `publicClient: true` — no client secret |
+| Direct Access Grants | Enabled | `directAccessGrantsEnabled: true` — allows `grant_type=password` |
+| Standard Flow | Enabled | `standardFlowEnabled: true` — allows `grant_type=authorization_code` |
+| Implicit Flow | Disabled | `implicitFlowEnabled: false` |
+| Service Accounts | Disabled (default) | `serviceAccountsEnabled` not set — `client_credentials` grant unavailable |
+| Valid Redirect URIs | `*`, `urn:ietf:wg:oauth:2.0:oob` | For interactive cosign login |
 | Web Origins | `+` | Allow CORS from redirect URIs |
+| Default User | `jdoe` / `jdoe@redhat.com` / password `secure` | Pre-configured in realm import |
 
 ### Keycloak Issuer URL Patterns
 
@@ -104,10 +109,20 @@ type FulcioConfig struct {
 
 ### Keycloak Token Endpoint
 
-To obtain an identity token for CI/CD (service account or direct grant):
+The SecureSign operator's default Keycloak client (`trusted-artifact-signer`) is
+**public** (`publicClient: true`) with `directAccessGrantsEnabled: true` and
+`standardFlowEnabled: true`. The supported grant types are:
+
+| Grant Type | Supported | Notes |
+|---|---|---|
+| `client_credentials` | Production | Requires reconfiguring the client as confidential (`publicClient: false`, `serviceAccountsEnabled: true`). Recommended for CI/CD pipelines. |
+| `authorization_code` | Yes | `standardFlowEnabled: true` — for interactive browser-based `cosign login` |
+| `password` | Dev/test only | `directAccessGrantsEnabled: true` — works out of the box with operator default public client and `jdoe`/`secure` user |
+| `implicit` | No | `implicitFlowEnabled: false` |
 
 ```bash
-# Service account token (client credentials grant)
+# Production: client credentials grant (confidential client)
+# Requires Keycloak reconfiguration: publicClient: false, serviceAccountsEnabled: true
 IDENTITY_TOKEN=$(curl -s -X POST \
   "https://{{keycloak_host}}/realms/{{realm_name}}/protocol/openid-connect/token" \
   -d "grant_type=client_credentials" \
@@ -115,14 +130,15 @@ IDENTITY_TOKEN=$(curl -s -X POST \
   -d "client_secret={{client_secret}}" \
   | jq -r '.access_token')
 
-# User token (resource owner password grant — dev/test only)
+# Dev/test: password grant (operator default — public client, no secret required)
+# Default user: jdoe / jdoe@redhat.com / password: secure
 IDENTITY_TOKEN=$(curl -s -X POST \
   "https://{{keycloak_host}}/realms/{{realm_name}}/protocol/openid-connect/token" \
   -d "grant_type=password" \
   -d "client_id={{client_id}}" \
   -d "username={{username}}" \
   -d "password={{password}}" \
-  -d "scope=openid email" \
+  -d "scope=openid" \
   | jq -r '.access_token')
 ```
 
@@ -167,10 +183,15 @@ variable, or through the `id_tokens` keyword.
 signing-job:
   id_tokens:
     SIGSTORE_ID_TOKEN:
-      aud: sigstore
+      aud: trusted-artifact-signer
   script:
-    - cosign sign --identity-token=$SIGSTORE_ID_TOKEN ...
+    - cosign sign --identity-token=$SIGSTORE_ID_TOKEN
+        --oidc-client-id=trusted-artifact-signer ...
 ```
+
+The `aud` value must match the Fulcio OIDCIssuer's `clientID` for the
+`gitlab-pipeline` issuer entry. TAS uses `trusted-artifact-signer` (matching
+the operator's Keycloak client ID). Public Sigstore uses `sigstore`.
 
 | Environment Variable | Purpose |
 |---------------------|---------|
@@ -183,15 +204,40 @@ signing-job:
 Jenkins does not provide native OIDC tokens. Token must be obtained from an
 external identity provider (e.g., Keycloak).
 
+**Production:** Reconfigure the Keycloak client as **confidential** (`publicClient:
+false`, `serviceAccountsEnabled: true`) and use client credentials grant:
+
 ```groovy
 environment {
     IDENTITY_TOKEN = sh(
         script: '''
             curl -s -X POST \
-              "${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token" \
+              "${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
               -d "grant_type=client_credentials" \
               -d "client_id=${OIDC_CLIENT_ID}" \
               -d "client_secret=${OIDC_CLIENT_SECRET}" \
+              | jq -r '.access_token'
+        ''',
+        returnStdout: true
+    ).trim()
+}
+```
+
+**Dev/test:** The operator's default Keycloak client (`trusted-artifact-signer`)
+is **public** with `directAccessGrantsEnabled: true`. Use password grant with the
+pre-configured test user (`jdoe`/`secure`):
+
+```groovy
+environment {
+    IDENTITY_TOKEN = sh(
+        script: '''
+            curl -s -X POST \
+              "${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+              -d "grant_type=password" \
+              -d "client_id=${TAS_OIDC_CLIENT_ID}" \
+              -d "username=${OIDC_USER}" \
+              -d "password=${OIDC_PASSWORD}" \
+              -d "scope=openid" \
               | jq -r '.access_token'
         ''',
         returnStdout: true
@@ -224,23 +270,23 @@ collection uses a Jinja2 template (`fulcio-oidc.conf.j2`) to generate it.
 
 ```yaml
 oidc-issuers:
-  "https://keycloak.example.com/realms/sigstore":
-    issuer-url: "https://keycloak.example.com/realms/sigstore"
-    client-id: "sigstore"
+  "https://keycloak.example.com/realms/trusted-artifact-signer":
+    issuer-url: "https://keycloak.example.com/realms/trusted-artifact-signer"
+    client-id: "trusted-artifact-signer"
     type: "email"
-  "https://accounts.google.com":
-    issuer-url: "https://accounts.google.com"
-    client-id: "sigstore"
-    type: "email"
+  "https://gitlab.example.com":
+    issuer-url: "https://gitlab.example.com"
+    client-id: "trusted-artifact-signer"
+    type: "gitlab-pipeline"
 meta-issuers:
   "https://oidc.eks.*.amazonaws.com/id/*":
     client-id: "sigstore"
     type: "kubernetes"
 ci-issuer-metadata:
-  "github-actions":
-    subject-alternative-name-template: "..."
+  "gitlab-ci":
+    subject-alternative-name-template: "https://{{ .ci_config_ref_uri }}"
     extension-templates:
-      build-signer-uri: "..."
+      build-signer-uri: "https://{{ .ci_config_ref_uri }}"
 ```
 
 ### Ansible Variable Structure
@@ -252,10 +298,14 @@ The Ansible collection configures OIDC issuers through the
 tas_single_node_fulcio:
   fulcio_config:
     oidc_issuers:
-      - issuer: "https://keycloak.example.com/realms/sigstore"
-        url: "https://keycloak.example.com/realms/sigstore"
-        client_id: "sigstore"
+      - issuer: "https://keycloak.example.com/realms/trusted-artifact-signer"
+        url: "https://keycloak.example.com/realms/trusted-artifact-signer"
+        client_id: "trusted-artifact-signer"
         type: "email"
+      - issuer: "https://gitlab.example.com"
+        url: "https://gitlab.example.com"
+        client_id: "trusted-artifact-signer"
+        type: "gitlab-pipeline"
     meta_issuers:
       - issuer_pattern: "https://oidc.eks.*.amazonaws.com/id/*"
         client_id: "sigstore"

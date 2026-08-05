@@ -337,10 +337,13 @@ pipeline snippets.
 stage('Sign Image') {
     steps {
         script {
+            // Production: client_credentials grant (requires confidential client
+            // in Keycloak — set publicClient: false, serviceAccountsEnabled: true)
+            // Dev/test: replace with grant_type=password using OIDC_USER/OIDC_PASSWORD
             def IDENTITY_TOKEN = sh(
                 script: """
                     curl -s -X POST \
-                      "\${KEYCLOAK_URL}/realms/\${REALM}/protocol/openid-connect/token" \
+                      "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
                       -d "grant_type=client_credentials" \
                       -d "client_id=\${OIDC_CLIENT_ID}" \
                       -d "client_secret=\${OIDC_CLIENT_SECRET}" \
@@ -393,7 +396,7 @@ stage('Attest Image') {
             def IDENTITY_TOKEN = sh(
                 script: """
                     curl -s -X POST \
-                      "\${KEYCLOAK_URL}/realms/\${REALM}/protocol/openid-connect/token" \
+                      "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
                       -d "grant_type=client_credentials" \
                       -d "client_id=\${OIDC_CLIENT_ID}" \
                       -d "client_secret=\${OIDC_CLIENT_SECRET}" \
