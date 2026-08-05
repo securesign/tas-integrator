@@ -1,0 +1,72 @@
+name: test-scan-gitlab
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/tas-integrator/skills/scan-gitlab/**'
+      - 'plugins/tas-integrator/shared/knowledge-base/**'
+      - 'plugins/tas-integrator/shared/templates/gitlab-ci-blueprint.md'
+      - 'tests/scan-gitlab/**'
+      - 'tests/scan-gitlab-brownfield/**'
+      - '.github/workflows/test-scan-gitlab.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/tas-integrator/skills/scan-gitlab/**'
+      - 'tests/scan-gitlab/**'
+      - 'tests/scan-gitlab-brownfield/**'
+
+jobs:
+  scan-gitlab-greenfield:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start mock GitLab API (greenfield)
+        run: |
+          python3 tests/scan-gitlab/mock-gitlab-greenfield.py &
+          echo $! > /tmp/mock-gitlab.pid
+          sleep 1
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8070/api/v4/version 2>/dev/null || true)
+          echo "Mock GitLab API health: HTTP $STATUS"
+
+      - name: Run greenfield validation
+        run: bash tests/scan-gitlab/test-scan-greenfield.sh
+
+      - name: Cleanup
+        if: always()
+        run: |
+          [ -f /tmp/mock-gitlab.pid ] && kill "$(cat /tmp/mock-gitlab.pid)" 2>/dev/null || true
+
+  scan-gitlab-brownfield:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start mock TAS server
+        run: |
+          python3 tests/scan-gitlab-brownfield/mock-tas-server.py &
+          echo $! > /tmp/mock-tas.pid
+          sleep 1
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8090/fulcio/healthz 2>/dev/null || true)
+          echo "Mock TAS server health: HTTP $STATUS"
+
+      - name: Start mock GitLab API (brownfield)
+        run: |
+          python3 tests/scan-gitlab-brownfield/mock-gitlab-server.py &
+          echo $! > /tmp/mock-gitlab.pid
+          sleep 1
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8070/api/v4/version 2>/dev/null || true)
+          echo "Mock GitLab API health: HTTP $STATUS"
+
+      - name: Run brownfield validation
+        run: bash tests/scan-gitlab-brownfield/test-scan-brownfield.sh
+
+      - name: Cleanup
+        if: always()
+        run: |
+          [ -f /tmp/mock-gitlab.pid ] && kill "$(cat /tmp/mock-gitlab.pid)" 2>/dev/null || true
+          [ -f /tmp/mock-tas.pid ] && kill "$(cat /tmp/mock-tas.pid)" 2>/dev/null || true
