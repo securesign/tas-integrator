@@ -1,3 +1,9 @@
+---
+name: scan-gitlab
+description: |
+  Scan a GitLab CI environment for TAS integration readiness and generate an integration blueprint.
+---
+
 # scan-gitlab
 
 Scans a GitLab CI environment for TAS integration readiness. Connects to the
@@ -29,6 +35,11 @@ instance in any way.
 | GitLab configuration | Never modified — no pipeline edits, variable creation, or settings changes |
 | File system | Only writes the final blueprint file (when `save` or `both` output mode is used) |
 | Network | Only connects to the GitLab API URL and TAS endpoint URLs for health checks |
+
+The skill MUST NOT attempt to read CI/CD variable values — the GitLab API does
+not expose values to `read_api` scope tokens, and attempting to do so would
+violate the read-only guardrail. Only variable metadata (name, type, scope) is
+read.
 
 If any step would require a non-`GET` request to GitLab, skip that check and
 record the gap as `skip` with a note explaining that write access is not
@@ -189,9 +200,8 @@ response is received, prompt the user for a token before retrying.
 
 5. Record which variable types are present and which are missing.
 
-**Note:** The skill reads only variable metadata (name, type, scope). The GitLab
-API does not expose variable values to `read_api` scope tokens, and the skill
-MUST NOT attempt to read values — this would violate the read-only guardrail.
+**Note:** The skill reads only variable metadata (name, type, scope), not values
+(see Guardrails).
 
 ### Step 5 — Detect TAS Endpoints
 
@@ -252,7 +262,7 @@ Record pass/fail for each endpoint health check.
 
 ### Step 6 — Evaluate Gap Detection Rules
 
-Evaluate all 24 rules from `shared/knowledge-base/gap-detection-rules.md`
+Evaluate all 24 rules from [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md)
 against the data collected in Steps 1–5. For each rule, record:
 
 | Field | Value |
@@ -280,7 +290,7 @@ Rules that cannot be evaluated because the required data source is unavailable
 ### Step 7 — Compute Confidence Scores
 
 Calculate confidence scores using the weights defined in
-`shared/knowledge-base/gap-detection-rules.md`:
+[shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md):
 
 | Score | Weight | Calculation |
 |-------|--------|-------------|
@@ -314,7 +324,7 @@ Populate from scan results:
 | `scan_timestamp` | Current ISO 8601 timestamp |
 | `environment_type` | Auto-detected: `openshift`, `rhel`, or `kubernetes` |
 | `cicd_platform` | `gitlab` |
-| `agent_version` | Version from `.claude-plugin/plugin.json` |
+| `agent_version` | Version from [.claude-plugin/plugin.json](../../.claude-plugin/plugin.json) |
 | `overall_confidence` | Step 7 |
 | `overall_details` | Step 7 |
 | `detection_confidence` | Step 7 |
@@ -325,7 +335,7 @@ Populate from scan results:
 
 #### 8b — Platform Data
 
-Populate placeholders for `shared/templates/gitlab-ci-blueprint.md`:
+Populate placeholders for [shared/templates/gitlab-ci-blueprint.md](../../shared/templates/gitlab-ci-blueprint.md):
 
 | Placeholder | Source |
 |-------------|--------|
@@ -357,8 +367,8 @@ Populate placeholders for `shared/templates/gitlab-ci-blueprint.md`:
 
 #### `.gitlab-ci.yml` Snippet Generation
 
-Use patterns from `shared/knowledge-base/cosign-signing-patterns.md` and
-`shared/knowledge-base/oidc-setup.md` (GitLab CI section) to generate YAML
+Use patterns from [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) and
+[shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) (GitLab CI section) to generate YAML
 pipeline snippets.
 
 GitLab CI provides native OIDC tokens via the `id_tokens` keyword — this is the
@@ -541,11 +551,11 @@ This skill draws from the following knowledge base files during scanning:
 
 | File | Usage |
 |------|-------|
-| `shared/knowledge-base/gap-detection-rules.md` | Rule definitions for all 24 gap checks across 6 categories |
-| `shared/knowledge-base/cosign-signing-patterns.md` | Cosign CLI flags and command patterns for `.gitlab-ci.yml` snippet generation |
-| `shared/knowledge-base/tas-endpoint-config.md` | Endpoint URL formats, health check commands, and CI/CD variable mapping |
-| `shared/knowledge-base/oidc-setup.md` | OIDC issuer types, GitLab native `id_tokens`, and token injection patterns |
-| `shared/knowledge-base/deployment-patterns.md` | OpenShift operator and RHEL Ansible deployment detection indicators |
+| [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md) | Rule definitions for all 24 gap checks across 6 categories |
+| [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) | Cosign CLI flags and command patterns for `.gitlab-ci.yml` snippet generation |
+| [shared/knowledge-base/tas-endpoint-config.md](../../shared/knowledge-base/tas-endpoint-config.md) | Endpoint URL formats, health check commands, and CI/CD variable mapping |
+| [shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) | OIDC issuer types, GitLab native `id_tokens`, and token injection patterns |
+| [shared/knowledge-base/deployment-patterns.md](../../shared/knowledge-base/deployment-patterns.md) | OpenShift operator and RHEL Ansible deployment detection indicators |
 
 ---
 
@@ -596,7 +606,7 @@ The scanner checks for both the modern `id_tokens:` keyword and the legacy
 /tas-integrator:scan-gitlab
 
 GitLab URL: https://gitlab.example.com
-Token: glpat-xxxxxxxxxxxxxxxxxxxx
+Token: <your-gitlab-token>
 Project ID: my-group/my-project
 ```
 
@@ -606,7 +616,7 @@ Project ID: my-group/my-project
 /tas-integrator:scan-gitlab
 
 GitLab URL: https://gitlab.example.com
-Token: glpat-xxxxxxxxxxxxxxxxxxxx
+Token: <your-gitlab-token>
 Group ID: 42
 ```
 
@@ -616,7 +626,7 @@ Group ID: 42
 /tas-integrator:scan-gitlab
 
 GitLab URL: https://gitlab.example.com
-Token: glpat-xxxxxxxxxxxxxxxxxxxx
+Token: <your-gitlab-token>
 Project ID: 123
 Namespace: trusted-artifact-signer
 ```
@@ -627,7 +637,7 @@ Namespace: trusted-artifact-signer
 /tas-integrator:scan-gitlab --output=save --format=yaml
 
 GitLab URL: https://gitlab.example.com
-Token: glpat-xxxxxxxxxxxxxxxxxxxx
+Token: <your-gitlab-token>
 Project ID: my-group/my-project
 Rekor URL: https://rekor.tas.example.com
 Fulcio URL: https://fulcio.tas.example.com
@@ -640,7 +650,7 @@ TUF URL: https://tuf.tas.example.com
 /tas-integrator:scan-gitlab --output=both --output_path=./reports/gitlab-scan.md
 
 GitLab URL: https://gitlab.example.com
-Token: glpat-xxxxxxxxxxxxxxxxxxxx
+Token: <your-gitlab-token>
 Group ID: 42
 Namespace: trusted-artifact-signer
 ```

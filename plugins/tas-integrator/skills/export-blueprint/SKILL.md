@@ -1,3 +1,9 @@
+---
+name: export-blueprint
+description: |
+  Format raw blueprint data from scanner skills into a Markdown or YAML integration blueprint.
+---
+
 # export-blueprint
 
 Accepts raw blueprint data from scanner skills, formats it using shared
@@ -27,7 +33,7 @@ prompt or via a JSON/YAML file. The object has two top-level sections:
 ### `header`
 
 Values for the common header template
-(`shared/templates/blueprint-header.md`).
+([shared/templates/blueprint-header.md](../../shared/templates/blueprint-header.md)).
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -50,8 +56,8 @@ Values for the platform-specific template. The template is selected by
 
 | `cicd_platform` value | Template |
 |-----------------------|----------|
-| `jenkins` | `shared/templates/jenkins-blueprint.md` |
-| `gitlab-ci` | `shared/templates/gitlab-ci-blueprint.md` |
+| `jenkins` | [shared/templates/jenkins-blueprint.md](../../shared/templates/jenkins-blueprint.md) |
+| `gitlab-ci` | [shared/templates/gitlab-ci-blueprint.md](../../shared/templates/gitlab-ci-blueprint.md) |
 
 All `{{placeholder}}` markers in the selected template must have a
 corresponding key in the `platform` object. Placeholder names use
@@ -97,7 +103,7 @@ Detected TAS endpoint URLs. Used to populate the validation command summary.
 
 ### Step 2 — Render Header
 
-Read `shared/templates/blueprint-header.md` and replace each
+Read [shared/templates/blueprint-header.md](../../shared/templates/blueprint-header.md) and replace each
 `{{placeholder}}` marker with the corresponding value from `header`.
 
 ### Step 3 — Render Platform Section
@@ -217,7 +223,7 @@ Append a metadata footer at the end of the document:
 ```
 
 `template_version` is the version string from
-`.claude-plugin/plugin.json`. `output_format` is `markdown` or `yaml`
+[.claude-plugin/plugin.json](../../.claude-plugin/plugin.json). `output_format` is `markdown` or `yaml`
 depending on the chosen output mode.
 
 ### Step 7 — Output
@@ -321,9 +327,9 @@ file.
 
 The validation command summary draws from two knowledge-base files:
 
-- `shared/knowledge-base/cosign-signing-patterns.md` — cosign sign, verify,
+- [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) — cosign sign, verify,
   and attest command patterns with TAS-specific flags
-- `shared/knowledge-base/tas-endpoint-config.md` — endpoint URL formats,
+- [shared/knowledge-base/tas-endpoint-config.md](../../shared/knowledge-base/tas-endpoint-config.md) — endpoint URL formats,
   health check commands, and CI/CD variable mapping
 
 ### cosign Commands Included
