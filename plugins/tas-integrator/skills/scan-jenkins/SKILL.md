@@ -1,3 +1,9 @@
+---
+name: scan-jenkins
+description: |
+  Scan a Jenkins environment for TAS integration readiness and generate an integration blueprint.
+---
+
 # scan-jenkins
 
 Scans a Jenkins environment for TAS integration readiness. Connects to the

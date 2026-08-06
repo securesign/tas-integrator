@@ -1,3 +1,9 @@
+---
+name: scan-gitlab
+description: |
+  Scan a GitLab CI environment for TAS integration readiness and generate an integration blueprint.
+---
+
 # scan-gitlab
 
 Scans a GitLab CI environment for TAS integration readiness. Connects to the
