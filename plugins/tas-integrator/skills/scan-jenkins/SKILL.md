@@ -229,7 +229,7 @@ Record pass/fail for each endpoint health check.
 
 ### Step 6 — Evaluate Gap Detection Rules
 
-Evaluate all 24 rules from `shared/knowledge-base/gap-detection-rules.md`
+Evaluate all 24 rules from [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md)
 against the data collected in Steps 1–5. For each rule, record:
 
 | Field | Value |
@@ -257,7 +257,7 @@ Rules that cannot be evaluated because the required data source is unavailable
 ### Step 7 — Compute Confidence Scores
 
 Calculate confidence scores using the weights defined in
-`shared/knowledge-base/gap-detection-rules.md`:
+[shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md):
 
 | Score | Weight | Calculation |
 |-------|--------|-------------|
@@ -291,7 +291,7 @@ Populate from scan results:
 | `scan_timestamp` | Current ISO 8601 timestamp |
 | `environment_type` | Auto-detected: `openshift`, `rhel`, or `kubernetes` |
 | `cicd_platform` | `jenkins` |
-| `agent_version` | Version from `.claude-plugin/plugin.json` |
+| `agent_version` | Version from [.claude-plugin/plugin.json](../../.claude-plugin/plugin.json) |
 | `overall_confidence` | Step 7 |
 | `overall_details` | Step 7 |
 | `detection_confidence` | Step 7 |
@@ -302,7 +302,7 @@ Populate from scan results:
 
 #### 8b — Platform Data
 
-Populate placeholders for `shared/templates/jenkins-blueprint.md`:
+Populate placeholders for [shared/templates/jenkins-blueprint.md](../../shared/templates/jenkins-blueprint.md):
 
 | Placeholder | Source |
 |-------------|--------|
@@ -336,8 +336,8 @@ Populate placeholders for `shared/templates/jenkins-blueprint.md`:
 
 #### Jenkinsfile Snippet Generation
 
-Use patterns from `shared/knowledge-base/cosign-signing-patterns.md` and
-`shared/knowledge-base/oidc-setup.md` (Jenkins section) to generate Groovy
+Use patterns from [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) and
+[shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) (Jenkins section) to generate Groovy
 pipeline snippets.
 
 **Signing stage:**
@@ -539,11 +539,11 @@ This skill draws from the following knowledge base files during scanning:
 
 | File | Usage |
 |------|-------|
-| `shared/knowledge-base/gap-detection-rules.md` | Rule definitions for all 24 gap checks across 6 categories |
-| `shared/knowledge-base/cosign-signing-patterns.md` | Cosign CLI flags and command patterns for Jenkinsfile snippet generation |
-| `shared/knowledge-base/tas-endpoint-config.md` | Endpoint URL formats, health check commands, and CI/CD variable mapping |
-| `shared/knowledge-base/oidc-setup.md` | OIDC issuer types, Keycloak integration, and Jenkins token injection patterns |
-| `shared/knowledge-base/deployment-patterns.md` | OpenShift operator and RHEL Ansible deployment detection indicators |
+| [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md) | Rule definitions for all 24 gap checks across 6 categories |
+| [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) | Cosign CLI flags and command patterns for Jenkinsfile snippet generation |
+| [shared/knowledge-base/tas-endpoint-config.md](../../shared/knowledge-base/tas-endpoint-config.md) | Endpoint URL formats, health check commands, and CI/CD variable mapping |
+| [shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) | OIDC issuer types, Keycloak integration, and Jenkins token injection patterns |
+| [shared/knowledge-base/deployment-patterns.md](../../shared/knowledge-base/deployment-patterns.md) | OpenShift operator and RHEL Ansible deployment detection indicators |
 
 ---
 
