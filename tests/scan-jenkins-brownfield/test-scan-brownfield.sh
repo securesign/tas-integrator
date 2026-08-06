@@ -76,7 +76,8 @@ fi
 CONFIG_XML=$(curl -s -u "$AUTH" "$JENKINS_URL/job/tas-container-build/config.xml" 2>/dev/null)
 
 TAS_PATTERNS_EXPECTED=("cosign sign" "cosign verify" "cosign initialize" \
-  "--fulcio-url" "--rekor-url" "--oidc-issuer" "--identity-token" "--yes" "COSIGN_REKOR_URL")
+  "--fulcio-url" "--rekor-url" "--oidc-issuer" "--identity-token" "--yes" \
+  "COSIGN_REKOR_URL" "client_credentials" "OIDC_CLIENT_SECRET")
 TAS_FOUND=0
 TAS_MISSING=""
 for pattern in "${TAS_PATTERNS_EXPECTED[@]}"; do
@@ -87,10 +88,10 @@ for pattern in "${TAS_PATTERNS_EXPECTED[@]}"; do
   fi
 done
 
-if [ "$TAS_FOUND" -ge 8 ]; then
+if [ "$TAS_FOUND" -ge 10 ]; then
   pass "Found $TAS_FOUND/$((${#TAS_PATTERNS_EXPECTED[@]})) TAS patterns in pipeline"
 else
-  fail "Only $TAS_FOUND TAS patterns found (expected >= 8). Missing:$TAS_MISSING"
+  fail "Only $TAS_FOUND TAS patterns found (expected >= 10). Missing:$TAS_MISSING"
 fi
 
 ENV_VARS_EXPECTED=("TAS_FULCIO_URL" "TAS_REKOR_URL" "TAS_TSA_URL" "TAS_TUF_URL" \

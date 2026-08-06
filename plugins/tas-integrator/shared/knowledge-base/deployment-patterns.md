@@ -66,7 +66,7 @@ spec:
       OIDCIssuers:
         - Issuer: "https://{{keycloak_host}}/realms/{{realm_name}}"
           IssuerURL: "https://{{keycloak_host}}/realms/{{realm_name}}"
-          ClientID: "sigstore"
+          ClientID: "trusted-artifact-signer"
           Type: "email"
   trillian: {}
   tuf: {}
@@ -175,9 +175,9 @@ ansible-galaxy collection install redhat.artifact_signer
         tas_single_node_fulcio:
           fulcio_config:
             oidc_issuers:
-              - issuer: "https://keycloak.example.com/realms/sigstore"
-                url: "https://keycloak.example.com/realms/sigstore"
-                client_id: "sigstore"
+              - issuer: "https://keycloak.example.com/realms/trusted-artifact-signer"
+                url: "https://keycloak.example.com/realms/trusted-artifact-signer"
+                client_id: "trusted-artifact-signer"
                 type: "email"
             meta_issuers: []
             ci_issuer_metadata: []

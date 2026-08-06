@@ -373,7 +373,7 @@ sign-image:
   image: registry.redhat.io/rhtas/cosign-rhel9:latest
   id_tokens:
     SIGSTORE_ID_TOKEN:
-      aud: sigstore
+      aud: trusted-artifact-signer
   variables:
     TUF_URL: ${TAS_TUF_URL}
     FULCIO_URL: ${TAS_FULCIO_URL}
@@ -387,7 +387,7 @@ sign-image:
         --fulcio-url=${FULCIO_URL}
         --rekor-url=${REKOR_URL}
         --oidc-issuer=${OIDC_ISSUER}
-        --oidc-client-id=sigstore
+        --oidc-client-id=trusted-artifact-signer
         --identity-token=${SIGSTORE_ID_TOKEN}
         --yes
         ${IMAGE_REFERENCE}
@@ -418,7 +418,7 @@ attest-image:
   image: registry.redhat.io/rhtas/cosign-rhel9:latest
   id_tokens:
     SIGSTORE_ID_TOKEN:
-      aud: sigstore
+      aud: trusted-artifact-signer
   variables:
     FULCIO_URL: ${TAS_FULCIO_URL}
     REKOR_URL: ${TAS_REKOR_URL}
@@ -428,7 +428,7 @@ attest-image:
         --fulcio-url=${FULCIO_URL}
         --rekor-url=${REKOR_URL}
         --oidc-issuer=${OIDC_ISSUER}
-        --oidc-client-id=sigstore
+        --oidc-client-id=trusted-artifact-signer
         --identity-token=${SIGSTORE_ID_TOKEN}
         --predicate=${SBOM_FILE}
         --type=spdxjson
@@ -578,7 +578,7 @@ token acquisition significantly simpler than Jenkins:
 | Aspect | GitLab CI | Jenkins |
 |--------|-----------|---------|
 | Token source | Native `id_tokens` keyword | External Keycloak `curl` call |
-| Configuration | `id_tokens: SIGSTORE_ID_TOKEN: aud: sigstore` | Keycloak URL, realm, client ID, client secret |
+| Configuration | `id_tokens: SIGSTORE_ID_TOKEN: aud: trusted-artifact-signer` | Keycloak URL, realm, client ID, client secret |
 | Credentials needed | None (GitLab-managed) | Keycloak service account credentials |
 | Fulcio issuer type | `gitlab-pipeline` | `email` (via Keycloak) |
 | Token variable | `SIGSTORE_ID_TOKEN` (auto-populated) | `IDENTITY_TOKEN` (manually fetched) |

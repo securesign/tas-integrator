@@ -1,4 +1,4 @@
-FROM docker.io/jenkins/jenkins:lts-jdk17
+FROM docker.io/jenkins/jenkins:2.504.3-lts-jdk17
 
 ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false \
   -Dhudson.security.csrf.GlobalCrumbIssuerConfiguration.DISABLE_CSRF_PROTECTION=true"

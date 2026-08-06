@@ -104,7 +104,7 @@ guidance.
 | Description | An OIDC client ID must match the Fulcio-registered client |
 | Detection | Check `--oidc-client-id` flag usage or environment variables |
 | Pass Condition | Client ID present and matches Fulcio configuration |
-| Remediation | Set `--oidc-client-id` to the value registered in Fulcio (typically `sigstore`) |
+| Remediation | Set `--oidc-client-id` to the value registered in Fulcio (typically `trusted-artifact-signer` for TAS) |
 
 ### OIDC-003: Identity Token Available
 
