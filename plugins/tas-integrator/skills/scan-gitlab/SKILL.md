@@ -36,6 +36,11 @@ instance in any way.
 | File system | Only writes the final blueprint file (when `save` or `both` output mode is used) |
 | Network | Only connects to the GitLab API URL and TAS endpoint URLs for health checks |
 
+The skill MUST NOT attempt to read CI/CD variable values — the GitLab API does
+not expose values to `read_api` scope tokens, and attempting to do so would
+violate the read-only guardrail. Only variable metadata (name, type, scope) is
+read.
+
 If any step would require a non-`GET` request to GitLab, skip that check and
 record the gap as `skip` with a note explaining that write access is not
 permitted.
@@ -195,9 +200,8 @@ response is received, prompt the user for a token before retrying.
 
 5. Record which variable types are present and which are missing.
 
-**Note:** The skill reads only variable metadata (name, type, scope). The GitLab
-API does not expose variable values to `read_api` scope tokens, and the skill
-MUST NOT attempt to read values — this would violate the read-only guardrail.
+**Note:** The skill reads only variable metadata (name, type, scope), not values
+(see Guardrails).
 
 ### Step 5 — Detect TAS Endpoints
 
@@ -602,7 +606,7 @@ The scanner checks for both the modern `id_tokens:` keyword and the legacy
 /tas-integrator:scan-gitlab
 
 GitLab URL: https://gitlab.example.com
-Token: glpat-xxxxxxxxxxxxxxxxxxxx
+Token: <your-gitlab-token>
 Project ID: my-group/my-project
 ```
 
@@ -612,7 +616,7 @@ Project ID: my-group/my-project
 /tas-integrator:scan-gitlab
 
 GitLab URL: https://gitlab.example.com
-Token: glpat-xxxxxxxxxxxxxxxxxxxx
+Token: <your-gitlab-token>
 Group ID: 42
 ```
 
@@ -622,7 +626,7 @@ Group ID: 42
 /tas-integrator:scan-gitlab
 
 GitLab URL: https://gitlab.example.com
-Token: glpat-xxxxxxxxxxxxxxxxxxxx
+Token: <your-gitlab-token>
 Project ID: 123
 Namespace: trusted-artifact-signer
 ```
@@ -633,7 +637,7 @@ Namespace: trusted-artifact-signer
 /tas-integrator:scan-gitlab --output=save --format=yaml
 
 GitLab URL: https://gitlab.example.com
-Token: glpat-xxxxxxxxxxxxxxxxxxxx
+Token: <your-gitlab-token>
 Project ID: my-group/my-project
 Rekor URL: https://rekor.tas.example.com
 Fulcio URL: https://fulcio.tas.example.com
@@ -646,7 +650,7 @@ TUF URL: https://tuf.tas.example.com
 /tas-integrator:scan-gitlab --output=both --output_path=./reports/gitlab-scan.md
 
 GitLab URL: https://gitlab.example.com
-Token: glpat-xxxxxxxxxxxxxxxxxxxx
+Token: <your-gitlab-token>
 Group ID: 42
 Namespace: trusted-artifact-signer
 ```

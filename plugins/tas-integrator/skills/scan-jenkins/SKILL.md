@@ -35,6 +35,10 @@ instance in any way.
 | File system | Only writes the final blueprint file (when `save` or `both` output mode is used) |
 | Network | Only connects to the Jenkins API URL and TAS endpoint URLs for health checks |
 
+The skill MUST NOT attempt to read credential values — the Jenkins API does not
+expose them via `GET`, and attempting to do so would violate the read-only
+guardrail. Only credential metadata (ID, type, description) is read.
+
 If any step would require a non-`GET` request to Jenkins, skip that check and
 record the gap as `skip` with a note explaining that write access is not
 permitted.
@@ -167,9 +171,8 @@ If credentials are not provided, attempt unauthenticated access. If a `403` or
 
 4. Record which credential types are present and which are missing.
 
-**Note:** The skill reads only credential metadata (ID, type, description). It
-MUST NOT attempt to read credential values — the Jenkins API does not expose
-them via `GET`, and attempting to do so would violate the read-only guardrail.
+**Note:** The skill reads only credential metadata (ID, type, description), not
+values (see Guardrails).
 
 ### Step 5 — Detect TAS Endpoints
 
