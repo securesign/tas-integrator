@@ -16,8 +16,10 @@ Signs a container image using `cosign sign`.
 |------|------|-------------|
 | `--key` | string | Path to private key or KMS URI |
 | `--certificate` | string | Path to PEM-encoded x509 certificate |
-| `--cert-chain` | string | Path to PEM-encoded x509 certificate chain |
+| `--certificate-chain` | string | Path to PEM-encoded x509 certificate chain |
 | `--fulcio-url` | string | Fulcio server URL (keyless signing) |
+| `--fulcio-auth-flow` | string | OAuth2 flow type (normal\|device\|token\|client_credentials) |
+| `--insecure-skip-verify` | bool | Skip verifying Fulcio SCT |
 | `--rekor-url` | string | Rekor transparency log URL |
 | `--oidc-issuer` | string | OIDC token issuer URL |
 | `--oidc-client-id` | string | OIDC client ID for authentication |
@@ -26,7 +28,7 @@ Signs a container image using `cosign sign`.
 | `--oidc-provider` | string | OIDC provider to use for ambient credentials |
 | `--oidc-disable-ambient-providers` | bool | Disable ambient OIDC credential detection |
 | `--identity-token` | string | Pre-fetched OIDC identity token |
-| `--tlog-upload` | bool | Upload signature to transparency log (default true) |
+| `--tlog-upload` | bool | Upload signature to transparency log (default true; **deprecated** — prefer --signing-config) |
 | `--upload` | bool | Upload signature to registry (default true) |
 | `--output-signature` | string | Write signature to file |
 | `--output-payload` | string | Write payload to file |
@@ -34,17 +36,18 @@ Signs a container image using `cosign sign`.
 | `--bundle` | string | Write Sigstore bundle to file |
 | `--recursive` | bool | Sign all images in a multi-arch manifest |
 | `--yes` | bool | Skip confirmation prompts |
-| `--tsa-url` | string | RFC 3161 timestamp authority URL |
-| `--tsa-client-cacert` | string | TSA TLS CA certificate path |
-| `--tsa-client-cert` | string | TSA TLS client certificate path |
-| `--tsa-client-key` | string | TSA TLS client key path |
-| `--tsa-server-name` | string | TSA TLS server name override |
+| `--timestamp-server-url` | string | RFC 3161 timestamp authority URL |
+| `--timestamp-client-cacert` | string | TSA TLS CA certificate path |
+| `--timestamp-client-cert` | string | TSA TLS client certificate path |
+| `--timestamp-client-key` | string | TSA TLS client key path |
+| `--timestamp-server-name` | string | TSA TLS server name override |
 | `--issue-certificate` | bool | Issue a code signing certificate from Fulcio |
 | `--signing-config` | string | Path to signing config file |
+| `--use-signing-config` | bool | Use TUF-provided signing config for service URLs (default true) |
 | `--trusted-root` | string | Path to trusted root file |
-| `--new-bundle-format` | bool | Use new Sigstore bundle format |
+| `--new-bundle-format` | bool | Use new Sigstore bundle format (default true) |
 | `--record-creation-timestamp` | bool | Record creation timestamp in bundle |
-| `--payload-path` | string | Path to a payload file to sign |
+| `--payload` | string | Path to a payload file to sign |
 | `--sign-container-identity` | []string | Override container identity for signing |
 
 ### Keyless Signing Pattern (TAS Default)
@@ -78,7 +81,7 @@ cosign sign \
 cosign sign \
   --fulcio-url={{fulcio_url}} \
   --rekor-url={{rekor_url}} \
-  --tsa-url={{tsa_url}} \
+  --timestamp-server-url={{tsa_url}} \
   --oidc-issuer={{oidc_issuer}} \
   --oidc-client-id={{oidc_client_id}} \
   --identity-token={{identity_token}} \
@@ -98,20 +101,23 @@ Attaches an attestation to a container image using `cosign attest`.
 |------|------|-------------|
 | `--key` | string | Path to private key or KMS URI |
 | `--certificate` | string | Path to PEM-encoded x509 certificate |
-| `--cert-chain` | string | Path to PEM-encoded x509 certificate chain |
+| `--certificate-chain` | string | Path to PEM-encoded x509 certificate chain |
 | `--fulcio-url` | string | Fulcio server URL |
 | `--rekor-url` | string | Rekor transparency log URL |
 | `--predicate` | string | Path to predicate file |
+| `--statement` | string | Path to in-toto statement (alternative to --predicate) |
 | `--type` | string | Predicate type (e.g., slsaprovenance, spdxjson, cyclonedx) |
 | `--no-upload` | bool | Do not upload attestation to registry |
 | `--replace` | bool | Replace existing attestation |
-| `--recursive` | bool | Attest all images in a multi-arch manifest |
 | `--rekor-entry-type` | string | Type of entry to create in Rekor |
-| `--tlog-upload` | bool | Upload attestation to transparency log |
-| `--tsa-url` | string | RFC 3161 timestamp authority URL |
+| `--tlog-upload` | bool | Upload attestation to transparency log (**deprecated** — prefer --signing-config) |
+| `--timestamp-server-url` | string | RFC 3161 timestamp authority URL |
 | `--signing-config` | string | Path to signing config file |
+| `--use-signing-config` | bool | Use TUF-provided signing config for service URLs (default true) |
 | `--trusted-root` | string | Path to trusted root file |
-| `--new-bundle-format` | bool | Use new Sigstore bundle format |
+| `--new-bundle-format` | bool | Use new Sigstore bundle format (default true) |
+| `--bundle` | string | Write Sigstore bundle to file |
+| `--record-creation-timestamp` | bool | Record creation timestamp in bundle |
 
 ### Keyless Attestation Pattern
 
@@ -151,21 +157,22 @@ Verifies a signed container image using `cosign verify`.
 | `--certificate-github-workflow-ref` | string | Expected GitHub workflow ref |
 | `--ca-intermediates` | string | Path to CA intermediate certificates |
 | `--ca-roots` | string | Path to CA root certificates |
-| `--cert-chain` | string | Path to PEM-encoded certificate chain for verification |
+| `--certificate-chain` | string | Path to PEM-encoded certificate chain for verification |
 | `--sct` | string | Path to signed certificate timestamp |
-| `--ignore-sct` | bool | Skip SCT verification |
+| `--insecure-ignore-sct` | bool | Skip SCT verification |
 | `--rekor-url` | string | Rekor transparency log URL |
 | `--check-claims` | bool | Check claims in the signature (default true) |
 | `--output` | string | Output format (json or text) |
 | `--local-image` | bool | Verify a local image instead of remote |
-| `--offline` | bool | Force offline verification |
-| `--ignore-tlog` | bool | Skip transparency log verification |
-| `--tsa-cert-chain` | string | Path to TSA certificate chain for timestamp verification |
+| `--offline` | bool | Force offline verification (**deprecated** — use --bundle with --trusted-root) |
+| `--insecure-ignore-tlog` | bool | Skip transparency log verification |
+| `--timestamp-certificate-chain` | string | Path to TSA certificate chain for timestamp verification |
 | `--max-workers` | int | Maximum concurrent verification workers |
 | `--private-infrastructure` | bool | Skip tlog/SCT verification for private deployments |
 | `--use-signed-timestamps` | bool | Use signed timestamps for verification |
-| `--new-bundle-format` | bool | Expect new Sigstore bundle format |
+| `--new-bundle-format` | bool | Expect new Sigstore bundle format (default true) |
 | `--trusted-root` | string | Path to trusted root file |
+| `--experimental-oci11` | bool | Enable experimental OCI 1.1 behaviour |
 
 ### Keyless Verification Pattern (TAS)
 
@@ -204,18 +211,40 @@ cosign verify \
 | Variable | Purpose |
 |----------|---------|
 | `COSIGN_REKOR_URL` | Default Rekor server URL (overridden by `--rekor-url`) |
+| `COSIGN_FULCIO_URL` | Default Fulcio server URL (overridden by `--fulcio-url`) |
 | `COSIGN_CERTIFICATE` | Default signing certificate path |
 | `COSIGN_PASSWORD` | Password for encrypted private keys |
 | `COSIGN_EXPERIMENTAL` | Enable experimental features (legacy; use flags instead) |
-| `COSIGN_K` | Shorthand for key path |
 | `COSIGN_OUTPUT_FILE` | Default output file path |
-| `COSIGN_PKCS` | PKCS#11 module path for hardware tokens |
-| `COSIGN_SBOM` | Default SBOM path |
+| `COSIGN_PKCS11_MODULE_PATH` | PKCS#11 module path for hardware tokens |
 | `COSIGN_DOCKER_MEDIA_TYPES` | Use Docker media types instead of OCI |
 | `COSIGN_MAX_ATTACHMENT_SIZE` | Maximum attachment size in bytes |
-| `COSIGN_TEST` | Enable test mode |
+| `COSIGN_REPOSITORY` | Override the OCI registry for signature/attestation storage |
 | `SIGSTORE_REKOR_PUBLIC_KEY` | Path to Rekor public key for offline verification |
 | `SIGSTORE_ROOT_FILE` | Path to Sigstore root of trust file |
+| `SIGSTORE_TSA_CERTIFICATE_FILE` | Path to TSA certificate file for timestamp verification |
+| `SIGSTORE_ID_TOKEN` | Pre-fetched OIDC identity token (used by CI/CD ambient providers) |
+| `TUF_ROOT` | TUF root directory path |
+| `TUF_MIRROR` | TUF mirror URL |
+| `TUF_ROOT_JSON` | Path to initial TUF root.json file |
+| `SOURCE_DATE_EPOCH` | Unix timestamp for reproducible builds; sets creation timestamp |
+
+### Flag Aliases (Backward Compatibility)
+
+Cosign normalizes abbreviated `cert` flag names to their canonical `certificate`
+form. Both forms are accepted:
+
+| Alias (short) | Canonical (preferred) |
+|----------------|-----------------------|
+| `--cert` | `--certificate` |
+| `--cert-chain` | `--certificate-chain` |
+| `--cert-identity` | `--certificate-identity` |
+| `--cert-oidc-issuer` | `--certificate-oidc-issuer` |
+| `--cert-email` | `--certificate-email` |
+| `--output-cert` | `--output-certificate` |
+
+Generated snippets should use the canonical form. When scanning existing
+pipelines, match both forms.
 
 ---
 
@@ -241,9 +270,8 @@ Cosign supports automatic OIDC token acquisition from CI/CD platforms:
 | Provider | Environment | Token Source |
 |----------|-------------|--------------|
 | GitHub Actions | `ACTIONS_ID_TOKEN_REQUEST_URL` | GitHub OIDC provider |
-| GitLab CI | `SIGSTORE_ID_TOKEN` or CI_JOB_JWT | GitLab OIDC provider |
+| GitLab CI | `SIGSTORE_ID_TOKEN` or `CI_JOB_JWT` | GitLab OIDC provider |
 | Google Cloud | GCE metadata service | Workload identity |
-| AWS | STS | IRSA / Web identity |
-| Azure | IMDS | Managed identity |
+| Buildkite | `BUILDKITE_AGENT_OIDC_TOKEN` | Buildkite OIDC provider |
 
 Ambient providers can be disabled with `--oidc-disable-ambient-providers`.

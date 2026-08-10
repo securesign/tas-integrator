@@ -6,10 +6,10 @@ description: |
 
 # export-blueprint
 
-Accepts raw blueprint data from scanner skills, formats it using shared
-templates, appends a metadata block, and outputs the result as Markdown or
-YAML. Provides a validation command summary with cosign sign/verify and
-rekor-cli commands.
+Accept raw blueprint data from a scanner skill, format it using shared
+templates, append a metadata block, and output the result as Markdown or
+YAML. Include a validation command summary with `cosign sign`/`cosign verify`
+and `rekor-cli` commands.
 
 ---
 
@@ -19,53 +19,52 @@ rekor-cli commands.
 /tas-integrator:export-blueprint
 ```
 
-The skill is typically called by a scanner skill after it finishes analysing a
-CI/CD environment. It can also be invoked directly when raw blueprint data is
-already available.
+Run this after a scanner skill finishes analysing a CI/CD environment, or
+invoke it directly when raw blueprint data is already available.
 
 ---
 
 ## Inputs
 
-The caller must provide a **blueprint data object** — either inline in the
-prompt or via a JSON/YAML file. The object has two top-level sections:
+Require a **blueprint data object** — either inline in the prompt or via a
+JSON/YAML file. Parse two top-level sections:
 
 ### `header`
 
-Values for the common header template
+Use these values to populate the common header template
 ([shared/templates/blueprint-header.md](../../shared/templates/blueprint-header.md)).
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `scan_timestamp` | string | yes | ISO 8601 timestamp of the scan |
-| `environment_type` | string | yes | e.g. `openshift`, `rhel`, `kubernetes` |
-| `cicd_platform` | string | yes | Detected CI/CD platform name |
-| `agent_version` | string | yes | TAS Integrator plugin version |
-| `overall_confidence` | string | yes | Overall confidence score (e.g. `High`) |
-| `overall_details` | string | yes | One-line explanation |
-| `detection_confidence` | string | yes | Detection confidence score |
-| `detection_details` | string | yes | One-line explanation |
-| `compatibility_confidence` | string | yes | Compatibility confidence score |
-| `compatibility_details` | string | yes | One-line explanation |
-| `executive_summary` | string | yes | Multi-sentence executive summary |
+| `scan_timestamp` | string | yes | Set ISO 8601 timestamp of the scan |
+| `environment_type` | string | yes | Set to `openshift`, `rhel`, or `kubernetes` |
+| `cicd_platform` | string | yes | Set detected CI/CD platform name |
+| `agent_version` | string | yes | Set TAS Integrator plugin version |
+| `overall_confidence` | string | yes | Set overall confidence score (e.g. `High`) |
+| `overall_details` | string | yes | Provide one-line explanation |
+| `detection_confidence` | string | yes | Set detection confidence score |
+| `detection_details` | string | yes | Provide one-line explanation |
+| `compatibility_confidence` | string | yes | Set compatibility confidence score |
+| `compatibility_details` | string | yes | Provide one-line explanation |
+| `executive_summary` | string | yes | Write multi-sentence executive summary |
 
 ### `platform`
 
-Values for the platform-specific template. The template is selected by
-`cicd_platform`:
+Use these values to populate the platform-specific template. Select the
+template by `cicd_platform`:
 
 | `cicd_platform` value | Template |
 |-----------------------|----------|
 | `jenkins` | [shared/templates/jenkins-blueprint.md](../../shared/templates/jenkins-blueprint.md) |
 | `gitlab-ci` | [shared/templates/gitlab-ci-blueprint.md](../../shared/templates/gitlab-ci-blueprint.md) |
 
-All `{{placeholder}}` markers in the selected template must have a
-corresponding key in the `platform` object. Placeholder names use
-`snake_case`.
+Ensure every `{{placeholder}}` marker in the selected template has a
+corresponding key in the `platform` object. Use `snake_case` for placeholder
+names.
 
 ### `gaps` (optional)
 
-An array of gap-detection results. Each entry has:
+Accept an array of gap-detection results. Parse each entry as:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -77,16 +76,16 @@ An array of gap-detection results. Each entry has:
 
 ### `endpoints` (optional)
 
-Detected TAS endpoint URLs. Used to populate the validation command summary.
+Use detected TAS endpoint URLs to populate the validation command summary.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `rekor_url` | string | Rekor server base URL |
-| `fulcio_url` | string | Fulcio server base URL |
-| `tsa_url` | string | Timestamp Authority base URL |
-| `tuf_url` | string | TUF mirror base URL |
-| `oidc_issuer` | string | OIDC token issuer URL |
-| `oidc_client_id` | string | OIDC client ID |
+| `rekor_url` | string | Set Rekor server base URL |
+| `fulcio_url` | string | Set Fulcio server base URL |
+| `tsa_url` | string | Set Timestamp Authority base URL |
+| `tuf_url` | string | Set TUF mirror base URL |
+| `oidc_issuer` | string | Set OIDC token issuer URL |
+| `oidc_client_id` | string | Set OIDC client ID |
 
 ---
 
@@ -111,8 +110,8 @@ Read [shared/templates/blueprint-header.md](../../shared/templates/blueprint-hea
 Read the platform template selected in Step 1 and replace each
 `{{placeholder}}` marker with the corresponding value from `platform`.
 
-For repeating rows (tables where a placeholder represents one row in a
-multi-row table), expand the row once per item in the provided array value.
+Expand repeating rows (tables where a placeholder represents one row in a
+multi-row table) once per item in the provided array value.
 
 ### Step 4 — Append Gap Assessment Summary
 
@@ -128,10 +127,10 @@ platform section:
 | OIDC-001 | OIDC | Critical | fail | No OIDC issuer configured |
 ```
 
-Group rows by category in the order: `INFRA`, `OIDC`, `SIGN`, `VERIFY`,
+Sort rows by category in the order: `INFRA`, `OIDC`, `SIGN`, `VERIFY`,
 `POLICY`, `SUPPLY`. Within each category, sort by severity (Critical first).
 
-After the table, append a severity summary:
+After the table, add a severity summary:
 
 ```markdown
 **Results:** X passed, Y failed, Z skipped
@@ -140,10 +139,10 @@ After the table, append a severity summary:
 
 ### Step 5 — Append Validation Command Summary
 
-Append a **Validation Commands** section with cosign and rekor-cli commands
-that the user can run to verify a working TAS integration. Use endpoint URLs
-from `endpoints` when provided; otherwise use `{{placeholder}}` markers so the
-user can fill them in manually.
+Append a **Validation Commands** section with `cosign` and `rekor-cli` commands
+the user can run to verify a working TAS integration. Substitute endpoint URLs
+from `endpoints` when provided; otherwise insert `{{placeholder}}` markers so
+the user can fill them in manually.
 
 #### Endpoint Health Checks
 
@@ -222,37 +221,37 @@ Append a metadata footer at the end of the document:
 | **Output Format** | {{output_format}} |
 ```
 
-`template_version` is the version string from
-[.claude-plugin/plugin.json](../../.claude-plugin/plugin.json). `output_format` is `markdown` or `yaml`
-depending on the chosen output mode.
+Read `template_version` from
+[.claude-plugin/plugin.json](../../.claude-plugin/plugin.json). Set `output_format` to `markdown` or `yaml`
+based on the chosen output mode.
 
 ### Step 7 — Output
 
-The skill supports three output modes. The caller specifies the mode via the
-`output` parameter. If not specified, default to `display`.
+Select one of three output modes via the `output` parameter. Default to
+`display` if not specified.
 
 #### `display` (default)
 
-Render the assembled blueprint as Markdown directly in the conversation.
+Print the assembled blueprint as Markdown directly in the conversation.
 Do not write any file.
 
 #### `save`
 
-Write the assembled blueprint to a file. The caller provides a file path via
-the `output_path` parameter, or the skill uses the default:
+Write the assembled blueprint to a file. Use the `output_path` parameter if
+provided, otherwise generate the default path:
 
 ```
 blueprint-{{cicd_platform}}-{{scan_timestamp}}.md
 ```
 
-For YAML output, change the extension to `.yaml` and convert the document:
+For YAML output, change the extension to `.yaml` and convert as follows:
 
 ```
 blueprint-{{cicd_platform}}-{{scan_timestamp}}.yaml
 ```
 
-When saving as YAML, convert the Markdown blueprint into a structured YAML
-document with top-level keys matching the section headings:
+When saving as YAML, transform the Markdown blueprint into a structured YAML
+document. Map section headings to top-level keys:
 
 ```yaml
 blueprint:
@@ -308,8 +307,7 @@ blueprint:
 
 #### `both`
 
-Perform both `display` and `save`. Render in the conversation and write to
-file.
+Run both `display` and `save`. Print in the conversation and write to file.
 
 ---
 
@@ -317,15 +315,15 @@ file.
 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
-| `output` | `display`, `save`, `both` | `display` | Where to send the result |
-| `format` | `markdown`, `yaml` | `markdown` | Document format |
-| `output_path` | file path | auto-generated | File path for `save` and `both` modes |
+| `output` | `display`, `save`, `both` | `display` | Set where to send the result |
+| `format` | `markdown`, `yaml` | `markdown` | Set document format |
+| `output_path` | file path | auto-generated | Set file path for `save` and `both` modes |
 
 ---
 
 ## Validation Command Reference
 
-The validation command summary draws from two knowledge-base files:
+Generate the validation command summary using two knowledge-base files:
 
 - [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) — cosign sign, verify,
   and attest command patterns with TAS-specific flags
@@ -334,8 +332,8 @@ The validation command summary draws from two knowledge-base files:
 
 ### cosign Commands Included
 
-| Command | Purpose |
-|---------|---------|
+| Command | Use to |
+|---------|--------|
 | `cosign initialize` | Initialize TUF root of trust for the TAS instance |
 | `cosign sign` | Sign a container image using keyless (Fulcio) signing |
 | `cosign verify` | Verify a signed container image |
@@ -343,8 +341,8 @@ The validation command summary draws from two knowledge-base files:
 
 ### rekor-cli Commands Included
 
-| Command | Purpose |
-|---------|---------|
+| Command | Use to |
+|---------|--------|
 | `rekor-cli get` | Retrieve a transparency log entry by index or UUID |
 | `rekor-cli search` | Search the transparency log by email or artifact hash |
 
@@ -352,15 +350,15 @@ The validation command summary draws from two knowledge-base files:
 
 ## Error Handling
 
-| Condition | Behaviour |
-|-----------|-----------|
-| Missing required `header` field | List missing fields, stop |
-| Unknown `cicd_platform` | List supported platforms, stop |
-| Missing `platform` placeholder | List missing keys, stop |
-| Template file not found | Report missing template path, stop |
-| `output_path` not writable | Report permission error, stop |
+| Condition | Action |
+|-----------|--------|
+| Missing required `header` field | List missing fields and stop |
+| Unknown `cicd_platform` | List supported platforms and stop |
+| Missing `platform` placeholder | List missing keys and stop |
+| Template file not found | Report missing template path and stop |
+| `output_path` not writable | Report permission error and stop |
 | `gaps` provided but empty array | Skip gap summary section, proceed |
-| `endpoints` not provided | Use `{{placeholder}}` markers in validation commands |
+| `endpoints` not provided | Insert `{{placeholder}}` markers in validation commands |
 
 ---
 
