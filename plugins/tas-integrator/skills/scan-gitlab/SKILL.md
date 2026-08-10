@@ -9,9 +9,11 @@ description: |
 Scan a GitLab CI environment for TAS integration readiness. Connect to the
 GitLab API (read-only), inspect `.gitlab-ci.yml` pipeline configurations, CI/CD
 variables, project settings, and network reachability. Evaluate gap detection
-rules, generate a blueprint using the GitLab CI template with `.gitlab-ci.yml`
-job snippets, assign confidence scores, and present the result for review
-before export.
+rules from [`shared/knowledge-base/gap-detection-rules.md`](../../shared/knowledge-base/gap-detection-rules.md),
+generate a blueprint using
+[`shared/templates/gitlab-ci-blueprint.md`](../../shared/templates/gitlab-ci-blueprint.md)
+with `.gitlab-ci.yml` job snippets, assign confidence scores, and present the
+result for review before calling `/tas-integrator:export-blueprint`.
 
 ---
 
@@ -31,10 +33,10 @@ any way.
 | Constraint | Enforcement |
 |------------|-------------|
 | HTTP methods | `GET` only — no `POST`, `PUT`, `DELETE`, or `PATCH` requests to the GitLab API |
-| Access token | Used solely for API authentication — never stored, logged, or written to files |
-| GitLab configuration | Never modified — no pipeline edits, variable creation, or settings changes |
-| File system | Only writes the final blueprint file (when `save` or `both` output mode is used) |
-| Network | Only connects to the GitLab API URL and TAS endpoint URLs for health checks |
+| Access token | Use solely for API authentication — never store, log, or write to files |
+| GitLab configuration | Never modify — no pipeline edits, variable creation, or settings changes |
+| File system | Only write the final blueprint file (when `save` or `both` output mode is used) |
+| Network | Only connect to the GitLab API URL and TAS endpoint URLs for health checks |
 
 MUST NOT attempt to read CI/CD variable values — the GitLab API does not
 expose values to `read_api` scope tokens, and attempting to do so would violate
@@ -48,7 +50,7 @@ permitted.
 
 ## Inputs
 
-Collect GitLab connection details and optional TAS endpoint overrides.
+Collect GitLab connection details and optional TAS endpoint overrides from the user.
 
 ### Required
 
@@ -88,9 +90,9 @@ response, prompt the user for a token and retry.
 
 ### Scope
 
-- If `project_id` is provided, scan only that project.
-- If `group_id` is provided, list all projects in the group and scan each one.
-- If neither is provided, prompt the user to specify a project or group.
+- When `project_id` is provided, scan only that project.
+- When `group_id` is provided, list all projects in the group and scan each.
+- When neither is provided, prompt the user to specify a `project_id` or `group_id`.
 
 ---
 
@@ -113,12 +115,8 @@ response, prompt the user for a token and retry.
    to list runners assigned to the project.
 2. If `group_id` is provided, send
    `GET {{gitlab_url}}/api/v4/groups/{{group_id}}/runners` to list group runners.
-3. For each runner, extract:
-   - `id` — runner ID
-   - `description` — runner description
-   - `tag_list` — runner tags
-   - `run_untagged` — whether it runs untagged jobs
-   - `status` — online/offline/paused
+3. Extract from each runner: `id`, `description`, `tag_list`, `run_untagged`
+   (whether it runs untagged jobs), and `status` (online/offline/paused).
 4. Check for runners with relevant tags:
 
 | Tag Pattern | Indicates |
@@ -127,10 +125,8 @@ response, prompt the user for a token and retry.
 | `cosign`, `sigstore`, `signing` | Flag as signing-capable runner |
 | `kubernetes`, `k8s` | Flag as Kubernetes executor |
 
-5. Record:
-   - Total number of runners
-   - Runner executor types
-   - Whether at least one online runner is available
+5. Store the total runner count, executor types discovered, and whether
+   at least one online runner is available.
 
 ### Step 3 — Scan Pipeline Configurations
 
@@ -163,11 +159,9 @@ response, prompt the user for a token and retry.
 | `SIGSTORE_ID_TOKEN` | Detect Sigstore OIDC token variable |
 | `id_tokens:` | Detect GitLab native OIDC token |
 
-4. Record:
-   - Total number of projects scanned
-   - Which patterns were found and in which projects
-   - Whether any signing, verification, or attestation steps exist
-   - Whether `id_tokens:` keyword is used for OIDC
+4. Store the total number of projects scanned, which patterns matched in
+   which projects, whether signing/verification/attestation steps exist,
+   and whether `id_tokens:` is used for OIDC.
 
 ### Step 4 — Scan CI/CD Variables
 
@@ -177,12 +171,9 @@ response, prompt the user for a token and retry.
 2. If `group_id` is provided, also send
    `GET {{gitlab_url}}/api/v4/groups/{{group_id}}/variables` to list
    group-level variables.
-3. For each variable, extract:
-   - `key` — variable name
-   - `variable_type` — `env_var` or `file`
-   - `protected` — whether limited to protected branches
-   - `masked` — whether masked in job logs
-   - `environment_scope` — which environments the variable applies to
+3. Extract from each variable: `key` (name), `variable_type` (`env_var` or
+   `file`), `protected` (limited to protected branches), `masked` (hidden in
+   job logs), and `environment_scope` (target environments).
 4. Check for TAS-related variables by matching `key` against:
 
 | Pattern | Indicates |
@@ -196,10 +187,10 @@ response, prompt the user for a token and retry.
 | `COSIGN_PASSWORD` | Detect Cosign key passphrase |
 | `SIGSTORE_ID_TOKEN` | Detect pre-configured Sigstore token |
 
-5. Record which variable types are present and which are missing.
+5. Store which variable types are present and which are missing.
 
-**Note:** Read only variable metadata (name, type, scope), not values (see
-Guardrails).
+**Note:** Read only variable metadata (name, type, scope) — never read values
+(see Guardrails).
 
 ### Step 5 — Detect TAS Endpoints
 
@@ -256,7 +247,7 @@ Run a health check for every discovered endpoint:
 | TSA | `GET {{tsa_url}}/api/v1/timestamp/certchain` | HTTP 200 |
 | TUF | `GET {{tuf_url}}/root.json` | HTTP 200 |
 
-Record pass/fail for each check.
+Store pass/fail for each endpoint check.
 
 ### Step 6 — Evaluate Gap Detection Rules
 
@@ -304,10 +295,9 @@ Convert the weighted percentages to labels:
 | 50–79% | `Medium` |
 | 0–49% | `Low` |
 
-Record:
-- `overall_confidence` and `overall_details`
-- `detection_confidence` and `detection_details`
-- `compatibility_confidence` and `compatibility_details`
+Store `overall_confidence`/`overall_details`,
+`detection_confidence`/`detection_details`, and
+`compatibility_confidence`/`compatibility_details`.
 
 ### Step 8 — Generate Blueprint Data
 
@@ -353,7 +343,12 @@ Fill placeholders for [shared/templates/gitlab-ci-blueprint.md](../../shared/tem
 | `variable_protected` | Set from Step 4 — use `Yes` or `No` |
 | `variable_masked` | Set from Step 4 — use `Yes` or `No` |
 | `variable_description` | Set from Step 4 — describe variable purpose |
-| `variable_configuration_steps` | Generate variable setup instructions |
+| `variable_configuration_steps` | Generate `glab variable set` instructions for each variable |
+
+##### Pipeline & Validation Placeholders
+
+| Placeholder | Source |
+|-------------|--------|
 | `signing_job_snippet` | Generate `.gitlab-ci.yml` signing job using detected endpoints |
 | `verification_job_snippet` | Generate `.gitlab-ci.yml` verification job |
 | `attestation_job_snippet` | Generate `.gitlab-ci.yml` attestation job |
@@ -372,7 +367,8 @@ Generate YAML pipeline snippets using patterns from
 Prefer GitLab's native `id_tokens` keyword for OIDC token acquisition — unlike
 Jenkins, no external Keycloak token fetch is needed.
 
-**Signing job:**
+Generate the signing job — run `cosign initialize` then `cosign sign` with
+GitLab's native `id_tokens`:
 
 ```yaml
 sign-image:
@@ -400,7 +396,7 @@ sign-image:
         ${IMAGE_REFERENCE}
 ```
 
-**Verification job:**
+Generate the verification job — run `cosign verify` with certificate identity:
 
 ```yaml
 verify-image:
@@ -417,7 +413,7 @@ verify-image:
         ${IMAGE_REFERENCE}
 ```
 
-**Attestation job:**
+Generate the attestation job — run `cosign attest` with SBOM predicates:
 
 ```yaml
 attest-image:
@@ -443,9 +439,9 @@ attest-image:
         ${IMAGE_REFERENCE}
 ```
 
-Replace variable references with detected endpoint URLs when known. When
-endpoints are not detected, keep the variable references so the user can
-configure them.
+Substitute detected endpoint URLs for variable references when known.
+Keep variable references when endpoints are not detected so the user can
+configure them manually.
 
 #### 8c — Gaps Data
 
@@ -524,12 +520,12 @@ validation command summary, metadata block, and output formatting.
 
 ## GitLab API Reference
 
-Use `GET` requests with the `/api/v4` prefix for JSON responses.
+Send `GET` requests with the `/api/v4` prefix for JSON responses.
 
 | Endpoint | Use to |
 |----------|--------|
-| `GET /api/v4/version` | Fetch GitLab version and revision |
-| `GET /api/v4/projects/:id` | Fetch project details including default branch |
+| `GET /api/v4/version` | Retrieve GitLab version and revision |
+| `GET /api/v4/projects/:id` | Retrieve project details including default branch |
 | `GET /api/v4/projects/:id/repository/files/:path/raw?ref=:branch` | Read file content from repository |
 | `GET /api/v4/projects/:id/variables` | List project-level CI/CD variables |
 | `GET /api/v4/projects/:id/runners?type=project_type` | List project runners |
@@ -537,8 +533,8 @@ Use `GET` requests with the `/api/v4` prefix for JSON responses.
 | `GET /api/v4/groups/:id/runners` | List group runners |
 | `GET /api/v4/groups/:id/projects` | List projects in a group |
 
-Paginate list endpoints via `page` and `per_page` query parameters (default 20,
-max 100). Follow `x-next-page` response headers for pagination.
+Paginate list endpoints using `page` and `per_page` query parameters (default
+20, max 100). Read `x-next-page` response headers to iterate through pages.
 
 ---
 
@@ -546,13 +542,13 @@ max 100). Follow `x-next-page` response headers for pagination.
 
 Read these knowledge-base files during scanning:
 
-| File | Usage |
-|------|-------|
-| [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md) | Rule definitions for all 24 gap checks across 6 categories |
-| [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) | Cosign CLI flags and command patterns for `.gitlab-ci.yml` snippet generation |
-| [shared/knowledge-base/tas-endpoint-config.md](../../shared/knowledge-base/tas-endpoint-config.md) | Endpoint URL formats, health check commands, and CI/CD variable mapping |
-| [shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) | OIDC issuer types, GitLab native `id_tokens`, and token injection patterns |
-| [shared/knowledge-base/deployment-patterns.md](../../shared/knowledge-base/deployment-patterns.md) | OpenShift operator and RHEL Ansible deployment detection indicators |
+| File | Read to |
+|------|---------|
+| [`shared/knowledge-base/gap-detection-rules.md`](../../shared/knowledge-base/gap-detection-rules.md) | Evaluate all 24 gap checks across 6 categories |
+| [`shared/knowledge-base/cosign-signing-patterns.md`](../../shared/knowledge-base/cosign-signing-patterns.md) | Generate `.gitlab-ci.yml` snippets with correct `cosign` CLI flags |
+| [`shared/knowledge-base/tas-endpoint-config.md`](../../shared/knowledge-base/tas-endpoint-config.md) | Map endpoint URLs, run health checks, and set CI/CD variables |
+| [`shared/knowledge-base/oidc-setup.md`](../../shared/knowledge-base/oidc-setup.md) | Configure OIDC issuer, GitLab native `id_tokens`, and token injection |
+| [`shared/knowledge-base/deployment-patterns.md`](../../shared/knowledge-base/deployment-patterns.md) | Detect OpenShift operator and RHEL Ansible deployment indicators |
 
 ---
 
@@ -561,34 +557,34 @@ Read these knowledge-base files during scanning:
 | Condition | Action |
 |-----------|--------|
 | GitLab URL unreachable | Report connection error and stop |
-| Authentication required but token not provided | Prompt user for token and retry |
+| Authentication required but token not provided | Prompt user for `gitlab_token` with `read_api` scope, then retry |
 | Authentication failed (401/403) | Report invalid or insufficient token scope and stop |
 | Token lacks `read_api` scope | Report required scope and stop |
-| `.gitlab-ci.yml` not found | Record as gap (no pipeline configured), continue |
-| Included pipeline file not readable | Skip that include, continue scanning root config |
-| Cross-project `include:` detected | Skip with note (read-only, no cross-project access), continue |
-| CI/CD variables not accessible | Skip variable scan, continue |
-| Runners not accessible | Skip runner scan, continue |
+| `.gitlab-ci.yml` not found | Record gap (no pipeline configured), continue |
+| Included pipeline file not readable | Skip that include, log gap, continue scanning root config |
+| Cross-project `include:` detected | Skip with note (read-only, no cross-project access), log gap, continue |
+| CI/CD variables not accessible | Skip variable scan, log gap, continue |
+| Runners not accessible | Skip runner scan, log gap, continue |
 | TAS endpoints not detected | Insert `{{placeholder}}` markers in blueprint, warn user |
-| `kubectl` not available for namespace scan | Skip operator detection, continue with other methods |
-| Health check timeout (>10s) | Mark endpoint as unreachable, continue |
-| No pipeline jobs found | Record as gap (no signing steps), continue |
-| Group contains >100 projects | Scan first 100 with warning, suggest narrowing scope |
+| `kubectl` not available for namespace scan | Skip operator detection, log gap, continue with other methods |
+| Health check timeout (>10s) | Mark endpoint as unreachable, log gap, continue |
+| No pipeline jobs found | Record gap (no signing steps found), continue |
+| Group contains >100 projects | Scan first 100, warn user, suggest narrowing `project_id` scope |
 
 ---
 
 ## GitLab OIDC vs Jenkins OIDC
 
-Use GitLab CI's **native OIDC tokens** via the `id_tokens` keyword — this
-simplifies token acquisition compared to Jenkins:
+Prefer GitLab CI's **native OIDC tokens** via the `id_tokens` keyword to
+eliminate the external token fetch required by Jenkins. Compare the approaches:
 
 | Aspect | GitLab CI | Jenkins |
 |--------|-----------|---------|
-| Token source | Native `id_tokens` keyword | External Keycloak `curl` call |
-| Configuration | `id_tokens: SIGSTORE_ID_TOKEN: aud: trusted-artifact-signer` | Keycloak URL, realm, client ID, client secret |
-| Credentials needed | None (GitLab-managed) | Keycloak service account credentials |
-| Fulcio issuer type | `gitlab-pipeline` | `email` (via Keycloak) |
-| Token variable | `SIGSTORE_ID_TOKEN` (auto-populated) | `IDENTITY_TOKEN` (manually fetched) |
+| Token source | Use native `id_tokens` keyword | Run external Keycloak `curl` call |
+| Configuration | Set `id_tokens: SIGSTORE_ID_TOKEN: aud: trusted-artifact-signer` | Set Keycloak URL, realm, client ID, client secret |
+| Credentials needed | None (GitLab-managed) | Configure Keycloak service account credentials |
+| Fulcio issuer type | Set to `gitlab-pipeline` | Set to `email` (via Keycloak) |
+| Token variable | Read `SIGSTORE_ID_TOKEN` (auto-populated) | Read `IDENTITY_TOKEN` (manually fetched) |
 
 Check for both the modern `id_tokens:` keyword and the legacy `CI_JOB_JWT_V2`
 / `CI_JOB_JWT` variables.
@@ -598,6 +594,8 @@ Check for both the modern `id_tokens:` keyword and the legacy `CI_JOB_JWT_V2`
 ## Examples
 
 ### Basic Scan (Single Project)
+
+Scan a single project and display results in the conversation:
 
 ```
 /tas-integrator:scan-gitlab
@@ -609,6 +607,8 @@ Project ID: my-group/my-project
 
 ### Scan a Group
 
+Scan all projects in a group and display results:
+
 ```
 /tas-integrator:scan-gitlab
 
@@ -618,6 +618,8 @@ Group ID: 42
 ```
 
 ### Scan with TAS Namespace
+
+Auto-detect TAS endpoints from the Securesign CR in the namespace:
 
 ```
 /tas-integrator:scan-gitlab
@@ -629,6 +631,8 @@ Namespace: trusted-artifact-signer
 ```
 
 ### Scan with Explicit Endpoints and YAML Save
+
+Override endpoint URLs and write the blueprint as YAML:
 
 ```
 /tas-integrator:scan-gitlab --output=save --format=yaml
@@ -642,6 +646,8 @@ TUF URL: https://tuf.tas.example.com
 ```
 
 ### Scan with Display and Save
+
+Display the blueprint and save it to a custom output path:
 
 ```
 /tas-integrator:scan-gitlab --output=both --output_path=./reports/gitlab-scan.md

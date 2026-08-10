@@ -6,10 +6,11 @@ description: |
 
 # export-blueprint
 
-Accept raw blueprint data from a scanner skill, format it using shared
-templates, append a metadata block, and output the result as Markdown or
-YAML. Include a validation command summary with `cosign sign`/`cosign verify`
-and `rekor-cli` commands.
+Accept raw blueprint data from a scanner skill, format it using templates in
+`shared/templates/`, append a metadata block, and output the result as
+Markdown or YAML. Generate a validation command summary with
+`cosign sign`/`cosign verify` and `rekor-cli` commands using patterns from
+[`shared/knowledge-base/cosign-signing-patterns.md`](../../shared/knowledge-base/cosign-signing-patterns.md).
 
 ---
 
@@ -102,13 +103,16 @@ Use detected TAS endpoint URLs to populate the validation command summary.
 
 ### Step 2 — Render Header
 
-Read [shared/templates/blueprint-header.md](../../shared/templates/blueprint-header.md) and replace each
+Read [`shared/templates/blueprint-header.md`](../../shared/templates/blueprint-header.md)
+and replace each
 `{{placeholder}}` marker with the corresponding value from `header`.
 
 ### Step 3 — Render Platform Section
 
-Read the platform template selected in Step 1 and replace each
-`{{placeholder}}` marker with the corresponding value from `platform`.
+Read the platform template selected in Step 1 (e.g.
+[`shared/templates/jenkins-blueprint.md`](../../shared/templates/jenkins-blueprint.md) or
+[`shared/templates/gitlab-ci-blueprint.md`](../../shared/templates/gitlab-ci-blueprint.md)) and replace each `{{placeholder}}`
+marker with the corresponding value from `platform`.
 
 Expand repeating rows (tables where a placeholder represents one row in a
 multi-row table) once per item in the provided array value.
@@ -139,10 +143,11 @@ After the table, add a severity summary:
 
 ### Step 5 — Append Validation Command Summary
 
-Append a **Validation Commands** section with `cosign` and `rekor-cli` commands
-the user can run to verify a working TAS integration. Substitute endpoint URLs
-from `endpoints` when provided; otherwise insert `{{placeholder}}` markers so
-the user can fill them in manually.
+Append a **Validation Commands** section using command patterns from
+[`shared/knowledge-base/cosign-signing-patterns.md`](../../shared/knowledge-base/cosign-signing-patterns.md) and endpoint formats from
+[`shared/knowledge-base/tas-endpoint-config.md`](../../shared/knowledge-base/tas-endpoint-config.md). Substitute endpoint URLs from
+`endpoints` when provided; otherwise insert `{{placeholder}}` markers so the
+user can fill them in manually.
 
 #### Endpoint Health Checks
 
@@ -221,9 +226,9 @@ Append a metadata footer at the end of the document:
 | **Output Format** | {{output_format}} |
 ```
 
-Read `template_version` from
-[.claude-plugin/plugin.json](../../.claude-plugin/plugin.json). Set `output_format` to `markdown` or `yaml`
-based on the chosen output mode.
+Read `template_version` from [`.claude-plugin/plugin.json`](../../.claude-plugin/plugin.json).
+Set `output_format` to `markdown`
+or `yaml` based on the chosen output mode.
 
 ### Step 7 — Output
 
@@ -250,8 +255,9 @@ For YAML output, change the extension to `.yaml` and convert as follows:
 blueprint-{{cicd_platform}}-{{scan_timestamp}}.yaml
 ```
 
-When saving as YAML, transform the Markdown blueprint into a structured YAML
-document. Map section headings to top-level keys:
+When saving as YAML, convert the Markdown blueprint into a structured YAML
+document. Map each section heading to a top-level key and nest fields
+accordingly:
 
 ```yaml
 blueprint:
@@ -307,7 +313,8 @@ blueprint:
 
 #### `both`
 
-Run both `display` and `save`. Print in the conversation and write to file.
+Execute both `display` and `save` modes. Print the blueprint in the
+conversation and write it to file.
 
 ---
 
@@ -315,22 +322,25 @@ Run both `display` and `save`. Print in the conversation and write to file.
 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
-| `output` | `display`, `save`, `both` | `display` | Set where to send the result |
-| `format` | `markdown`, `yaml` | `markdown` | Set document format |
-| `output_path` | file path | auto-generated | Set file path for `save` and `both` modes |
+| `output` | `display`, `save`, `both` | `display` | Control where to send the result |
+| `format` | `markdown`, `yaml` | `markdown` | Select the document format |
+| `output_path` | file path | auto-generated | Specify file path for `save` and `both` modes |
 
 ---
 
 ## Validation Command Reference
 
-Generate the validation command summary using two knowledge-base files:
+Generate the validation command summary by reading two knowledge-base files:
 
-- [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) — cosign sign, verify,
-  and attest command patterns with TAS-specific flags
-- [shared/knowledge-base/tas-endpoint-config.md](../../shared/knowledge-base/tas-endpoint-config.md) — endpoint URL formats,
-  health check commands, and CI/CD variable mapping
+- Read [`shared/knowledge-base/cosign-signing-patterns.md`](../../shared/knowledge-base/cosign-signing-patterns.md)
+  for `cosign sign`, `cosign verify`, and `cosign attest` command patterns with
+  TAS-specific flags
+- Read [`shared/knowledge-base/tas-endpoint-config.md`](../../shared/knowledge-base/tas-endpoint-config.md)
+  for endpoint URL formats, health check commands, and CI/CD variable mapping
 
-### cosign Commands Included
+### cosign Commands to Include
+
+Include these `cosign` commands in the validation summary:
 
 | Command | Use to |
 |---------|--------|
@@ -339,7 +349,9 @@ Generate the validation command summary using two knowledge-base files:
 | `cosign verify` | Verify a signed container image |
 | `cosign attest` | Attach an attestation to a container image |
 
-### rekor-cli Commands Included
+### rekor-cli Commands to Include
+
+Include these `rekor-cli` commands in the validation summary:
 
 | Command | Use to |
 |---------|--------|
@@ -356,7 +368,7 @@ Generate the validation command summary using two knowledge-base files:
 | Unknown `cicd_platform` | List supported platforms and stop |
 | Missing `platform` placeholder | List missing keys and stop |
 | Template file not found | Report missing template path and stop |
-| `output_path` not writable | Report permission error and stop |
+| `output_path` not writable | Report permission error for the target path and stop |
 | `gaps` provided but empty array | Skip gap summary section, proceed |
 | `endpoints` not provided | Insert `{{placeholder}}` markers in validation commands |
 
@@ -365,6 +377,8 @@ Generate the validation command summary using two knowledge-base files:
 ## Examples
 
 ### Minimal Invocation (Display Only)
+
+Render the blueprint directly in the conversation using default settings:
 
 ```
 /tas-integrator:export-blueprint
@@ -390,6 +404,8 @@ Blueprint data:
 
 ### Save as YAML
 
+Write the blueprint to a YAML file using `--format=yaml`:
+
 ```
 /tas-integrator:export-blueprint --output=save --format=yaml
 
@@ -397,6 +413,8 @@ Blueprint data: (as above)
 ```
 
 ### Display and Save with Custom Path
+
+Print the blueprint and write it to a custom output path:
 
 ```
 /tas-integrator:export-blueprint --output=both --output_path=./reports/tas-blueprint.md
