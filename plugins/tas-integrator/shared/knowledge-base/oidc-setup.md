@@ -51,22 +51,25 @@ From Fulcio `pkg/config/config.go`, each OIDC issuer entry includes:
 | `ChallengeClaim` | No | Custom challenge claim for non-standard issuers |
 | `CACert` | No | PEM CA certificate to trust the OIDC provider's TLS certificate |
 | `SkipEmailVerification` | No | Skip `email_verified` claim check (for providers like Microsoft Entra/ADFS) |
+| `Description` | No | Optional human-readable description for this issuer |
+| `Contact` | No | Optional email contact for the team managing this issuer |
 
 ### Operator CRD OIDCIssuer Fields
 
-From `api/v1alpha1/fulcio_types.go`, the operator's OIDCIssuer struct:
+From `api/v1/fulcio_types.go`, the operator's OIDCIssuer struct (v1alpha1 is
+deprecated; v1 uses camelCase JSON tags):
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `Issuer` | Yes | The OIDC issuer identifier |
-| `IssuerURL` | No | The OIDC token issuer URL |
-| `ClientID` | Yes | Expected audience in the identity token |
-| `Type` | Yes | Issuer type string |
-| `CIProvider` | No | CI provider mapping |
-| `IssuerClaim` | No | Override issuer claim |
-| `SubjectDomain` | No | Domain for subject matching |
-| `SPIFFETrustDomain` | No | SPIFFE trust domain |
-| `ChallengeClaim` | No | Custom challenge claim |
+| Field | JSON Tag | Required | Description |
+|-------|----------|----------|-------------|
+| `Issuer` | `issuer` | Yes | The OIDC issuer identifier |
+| `IssuerURL` | `issuerURL` | No | The OIDC token issuer URL |
+| `ClientID` | `clientID` | Yes | Expected audience in the identity token |
+| `Type` | `type` | Yes | Issuer type string |
+| `CIProvider` | `ciProvider` | No | CI provider mapping |
+| `IssuerClaim` | `issuerClaim` | No | Override issuer claim |
+| `SubjectDomain` | `subjectDomain` | No | Domain for subject matching |
+| `SPIFFETrustDomain` | `spiffeTrustDomain` | No | SPIFFE trust domain |
+| `ChallengeClaim` | `challengeClaim` | No | Custom challenge claim |
 
 ### FulcioConfig Structure (Operator CRD)
 
@@ -324,7 +327,10 @@ such as cloud-managed Kubernetes OIDC endpoints.
 |---------|---------------|----------|
 | `https://oidc.eks.*.amazonaws.com/id/*` | AWS EKS | EKS cluster OIDC |
 | `https://container.googleapis.com/v1/projects/*/locations/*/clusters/*` | GKE | GKE cluster OIDC |
-| `https://token.actions.githubusercontent.com` | GitHub | GitHub Actions OIDC |
+
+**Note:** GitHub Actions (`https://token.actions.githubusercontent.com`) is a
+regular OIDCIssuer in Fulcio's default config with type `github-workflow`, not a
+meta issuer. It does not use wildcards.
 
 Wildcard `*` matches a single path segment (no `/` or `.`).
 

@@ -223,7 +223,10 @@ cosign verify \
 | `SIGSTORE_REKOR_PUBLIC_KEY` | Path to Rekor public key for offline verification |
 | `SIGSTORE_ROOT_FILE` | Path to Sigstore root of trust file |
 | `SIGSTORE_TSA_CERTIFICATE_FILE` | Path to TSA certificate file for timestamp verification |
+| `SIGSTORE_CT_LOG_PUBLIC_KEY_FILE` | Override CT log public key for SCT validation |
 | `SIGSTORE_ID_TOKEN` | Pre-fetched OIDC identity token (used by CI/CD ambient providers) |
+| `COSIGN_PKCS11_PIN` | PKCS#11 PIN for hardware token authentication |
+| `COSIGN_PKCS11_IGNORE_CERTIFICATE` | Disable loading certificates with PKCS#11 |
 | `TUF_ROOT` | TUF root directory path |
 | `TUF_MIRROR` | TUF mirror URL |
 | `TUF_ROOT_JSON` | Path to initial TUF root.json file |
@@ -270,8 +273,10 @@ Cosign supports automatic OIDC token acquisition from CI/CD platforms:
 | Provider | Environment | Token Source |
 |----------|-------------|--------------|
 | GitHub Actions | `ACTIONS_ID_TOKEN_REQUEST_URL` | GitHub OIDC provider |
-| GitLab CI | `SIGSTORE_ID_TOKEN` or `CI_JOB_JWT` | GitLab OIDC provider |
 | Google Cloud | GCE metadata service | Workload identity |
-| Buildkite | `BUILDKITE_AGENT_OIDC_TOKEN` | Buildkite OIDC provider |
+| Buildkite | `BUILDKITE_AGENT_ACCESS_TOKEN` | Buildkite Agent API → OIDC token |
+| SPIFFE | `SPIFFE_ENDPOINT_SOCKET` | SPIFFE workload API |
+| Filesystem | File path | Reads token from a file on disk |
+| Envvar | `SIGSTORE_ID_TOKEN` | Generic env var provider (used by GitLab CI) |
 
 Ambient providers can be disabled with `--oidc-disable-ambient-providers`.

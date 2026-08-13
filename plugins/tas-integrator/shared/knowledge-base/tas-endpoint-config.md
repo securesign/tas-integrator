@@ -21,7 +21,7 @@ and Fulcio/Rekor/TSA URL formats.
 
 ## Operator CRD Status Fields
 
-The `securesign.dev/v1alpha1` `Securesign` custom resource exposes component
+The `rhtas.redhat.com/v1` `Securesign` custom resource exposes component
 URLs in its status fields. The TAS operator reconciles these URLs after
 deployment.
 
@@ -34,7 +34,7 @@ type SecuresignSpec struct {
     Trillian           TrillianSpec
     Tuf                TufSpec
     Ctlog              CTlogSpec
-    TimestampAuthority TimestampAuthoritySpec
+    TimestampAuthority *TimestampAuthoritySpec
 }
 ```
 
@@ -43,10 +43,10 @@ type SecuresignSpec struct {
 ```go
 type SecuresignStatus struct {
     Conditions []metav1.Condition
-    Rekor      SecuresignRekorStatus
-    Fulcio     SecuresignFulcioStatus
-    Tuf        SecuresignTufStatus
-    TSA        SecuresignTSAStatus
+    RekorStatus  SecuresignRekorStatus
+    FulcioStatus SecuresignFulcioStatus
+    TufStatus    SecuresignTufStatus
+    TSAStatus    SecuresignTSAStatus
 }
 ```
 

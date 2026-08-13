@@ -10,8 +10,8 @@ OpenShift operator and RHEL Ansible deployments.
 
 | Method | Target Platform | Managed By | Package |
 |--------|----------------|------------|---------|
-| OpenShift Operator | OpenShift 4.x | OLM / Securesign CR | `securesign-operator` |
-| Ansible Collection | RHEL 9+ (single node) | Ansible / Podman | `redhat.artifact_signer` |
+| OpenShift Operator | OpenShift 4.13+ | OLM / Securesign CR | `securesign-operator` |
+| Ansible Collection | RHEL 9.4+ (x86_64) | Ansible / Podman | `redhat.artifact_signer` |
 
 ---
 
@@ -21,7 +21,7 @@ OpenShift operator and RHEL Ansible deployments.
 
 | Requirement | Details |
 |-------------|---------|
-| OpenShift version | 4.12+ |
+| OpenShift version | 4.13+ |
 | Cluster admin access | Required for CRD installation |
 | OLM (Operator Lifecycle Manager) | Pre-installed on OpenShift |
 | Pull secret | Access to `registry.redhat.io` |
@@ -54,7 +54,7 @@ EOF
 2. **Create a Securesign custom resource:**
 
 ```yaml
-apiVersion: rhtas.redhat.com/v1alpha1
+apiVersion: rhtas.redhat.com/v1
 kind: Securesign
 metadata:
   name: securesign
@@ -136,8 +136,8 @@ TSA_URL=$(kubectl get securesign -n {{namespace}} \
 
 | Requirement | Details |
 |-------------|---------|
-| RHEL version | 9.x |
-| Architecture | x86_64 or aarch64 |
+| RHEL version | 9.4+ |
+| Architecture | x86_64 |
 | Root access | Required for package installation and systemd |
 | Podman | Installed automatically (via `tas_single_node_system_packages`) |
 | Registry access | Pull secret for `registry.redhat.io` |
@@ -241,7 +241,7 @@ Each TAS service can be individually enabled or disabled:
 
 | Feature | OpenShift Operator | RHEL Ansible |
 |---------|-------------------|--------------|
-| Target | OpenShift 4.12+ | RHEL 9+ |
+| Target | OpenShift 4.13+ | RHEL 9.4+ (x86_64) |
 | Container runtime | CRI-O (OpenShift) | Podman |
 | Lifecycle management | OLM automatic upgrades | Manual re-run of playbook |
 | Networking | OpenShift Routes / Ingress | nginx reverse proxy |
