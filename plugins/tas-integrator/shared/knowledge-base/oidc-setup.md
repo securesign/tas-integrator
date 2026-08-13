@@ -51,22 +51,25 @@ From Fulcio `pkg/config/config.go`, each OIDC issuer entry includes:
 | `ChallengeClaim` | No | Custom challenge claim for non-standard issuers |
 | `CACert` | No | PEM CA certificate to trust the OIDC provider's TLS certificate |
 | `SkipEmailVerification` | No | Skip `email_verified` claim check (for providers like Microsoft Entra/ADFS) |
+| `Description` | No | Optional human-readable description for this issuer |
+| `Contact` | No | Optional email contact for the team managing this issuer |
 
 ### Operator CRD OIDCIssuer Fields
 
-From `api/v1alpha1/fulcio_types.go`, the operator's OIDCIssuer struct:
+From `api/v1/fulcio_types.go`, the operator's OIDCIssuer struct (v1alpha1 is
+deprecated; v1 uses camelCase JSON tags):
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `Issuer` | Yes | The OIDC issuer identifier |
-| `IssuerURL` | No | The OIDC token issuer URL |
-| `ClientID` | Yes | Expected audience in the identity token |
-| `Type` | Yes | Issuer type string |
-| `CIProvider` | No | CI provider mapping |
-| `IssuerClaim` | No | Override issuer claim |
-| `SubjectDomain` | No | Domain for subject matching |
-| `SPIFFETrustDomain` | No | SPIFFE trust domain |
-| `ChallengeClaim` | No | Custom challenge claim |
+| Field | JSON Tag | Required | Description |
+|-------|----------|----------|-------------|
+| `Issuer` | `issuer` | Yes | The OIDC issuer identifier |
+| `IssuerURL` | `issuerURL` | No | The OIDC token issuer URL |
+| `ClientID` | `clientID` | Yes | Expected audience in the identity token |
+| `Type` | `type` | Yes | Issuer type string |
+| `CIProvider` | `ciProvider` | No | CI provider mapping |
+| `IssuerClaim` | `issuerClaim` | No | Override issuer claim |
+| `SubjectDomain` | `subjectDomain` | No | Domain for subject matching |
+| `SPIFFETrustDomain` | `spiffeTrustDomain` | No | SPIFFE trust domain |
+| `ChallengeClaim` | `challengeClaim` | No | Custom challenge claim |
 
 ### FulcioConfig Structure (Operator CRD)
 
@@ -80,49 +83,41 @@ type FulcioConfig struct {
 
 ---
 
-## Keycloak OIDC Integration
+## OIDC Provider Configuration
 
-### Keycloak Realm Configuration for TAS
+TAS is OIDC-provider-agnostic. The operator and Ansible collection accept any
+OIDC-compliant provider (e.g., RHBK, Amazon Cognito). Neither ships a default
+provider — users must configure at least one `OIDCIssuer` or `MetaIssuer` in
+the Fulcio configuration. The Securesign CR is rejected if both are empty.
+
+### Required Settings
 
 | Setting | Value | Notes |
 |---------|-------|-------|
-| Realm URL | `https://{{keycloak_host}}/realms/{{realm_name}}` | OIDC discovery at `/.well-known/openid-configuration` |
-| Client ID | `trusted-artifact-signer` | Must match Fulcio `ClientID` |
+| Issuer URL | `https://{{oidc_host}}/realms/{{realm_name}}` | Must serve `/.well-known/openid-configuration` |
+| Client ID | User-defined | Must match the Fulcio OIDCIssuer `clientID` field |
 | Client Protocol | `openid-connect` | Standard OIDC |
-| Access Type | `public` | `publicClient: true` — no client secret |
-| Direct Access Grants | Enabled | `directAccessGrantsEnabled: true` — allows `grant_type=password` |
-| Standard Flow | Enabled | `standardFlowEnabled: true` — allows `grant_type=authorization_code` |
-| Implicit Flow | Disabled | `implicitFlowEnabled: false` |
-| Service Accounts | Disabled (default) | `serviceAccountsEnabled` not set — `client_credentials` grant unavailable |
-| Valid Redirect URIs | `*`, `urn:ietf:wg:oauth:2.0:oob` | For interactive cosign login |
-| Web Origins | `+` | Allow CORS from redirect URIs |
-| Default User | `jdoe` / `jdoe@redhat.com` / password `secure` | Pre-configured in realm import |
 
-### Keycloak Issuer URL Patterns
+### Keycloak / RHBK Issuer URL Pattern
 
-| Keycloak Version | Issuer URL Pattern |
-|------------------|--------------------|
-| Keycloak 17+ (Quarkus) | `https://{{keycloak_host}}/realms/{{realm_name}}` |
+| Version | Issuer URL Pattern |
+|---------|-------------------|
+| Keycloak 17+ / RHBK (Quarkus) | `https://{{keycloak_host}}/realms/{{realm_name}}` |
 | Keycloak < 17 (WildFly) | `https://{{keycloak_host}}/auth/realms/{{realm_name}}` |
-| Red Hat SSO 7.x | `https://{{sso_host}}/auth/realms/{{realm_name}}` |
-| RHBK (Red Hat Build of Keycloak) | `https://{{rhbk_host}}/realms/{{realm_name}}` |
 
-### Keycloak Token Endpoint
+### Token Acquisition
 
-The SecureSign operator's default Keycloak client (`trusted-artifact-signer`) is
-**public** (`publicClient: true`) with `directAccessGrantsEnabled: true` and
-`standardFlowEnabled: true`. The supported grant types are:
+The token endpoint is at `{{issuer_url}}/protocol/openid-connect/token`. Fulcio
+validates the resulting OIDC token and does not enforce a specific grant type.
 
-| Grant Type | Supported | Notes |
+| Grant Type | Client Type | Notes |
 |---|---|---|
-| `client_credentials` | Production | Requires reconfiguring the client as confidential (`publicClient: false`, `serviceAccountsEnabled: true`). Recommended for CI/CD pipelines. |
-| `authorization_code` | Yes | `standardFlowEnabled: true` — for interactive browser-based `cosign login` |
-| `password` | Dev/test only | `directAccessGrantsEnabled: true` — works out of the box with operator default public client and `jdoe`/`secure` user |
-| `implicit` | No | `implicitFlowEnabled: false` |
+| `client_credentials` | Confidential only | Service account flow; requires `serviceAccountsEnabled: true` in Keycloak |
+| `authorization_code` | Public or confidential | Interactive browser-based flow (`cosign login`) |
+| `password` | Public or confidential | Direct username/password exchange |
 
 ```bash
-# Production: client credentials grant (confidential client)
-# Requires Keycloak reconfiguration: publicClient: false, serviceAccountsEnabled: true
+# Client credentials grant (confidential client)
 IDENTITY_TOKEN=$(curl -s -X POST \
   "https://{{keycloak_host}}/realms/{{realm_name}}/protocol/openid-connect/token" \
   -d "grant_type=client_credentials" \
@@ -130,8 +125,7 @@ IDENTITY_TOKEN=$(curl -s -X POST \
   -d "client_secret={{client_secret}}" \
   | jq -r '.access_token')
 
-# Dev/test: password grant (operator default — public client, no secret required)
-# Default user: jdoe / jdoe@redhat.com / password: secure
+# Password grant (public client)
 IDENTITY_TOKEN=$(curl -s -X POST \
   "https://{{keycloak_host}}/realms/{{realm_name}}/protocol/openid-connect/token" \
   -d "grant_type=password" \
@@ -201,11 +195,11 @@ the operator's Keycloak client ID). Public Sigstore uses `sigstore`.
 
 ### Jenkins
 
-Jenkins does not provide native OIDC tokens. Token must be obtained from an
-external identity provider (e.g., Keycloak).
+Jenkins does not provide native OIDC tokens. The token must be obtained from an
+external identity provider (e.g., Keycloak). The grant type depends on how the
+OIDC client is configured.
 
-**Production:** Reconfigure the Keycloak client as **confidential** (`publicClient:
-false`, `serviceAccountsEnabled: true`) and use client credentials grant:
+**Client credentials grant (confidential client):**
 
 ```groovy
 environment {
@@ -223,9 +217,7 @@ environment {
 }
 ```
 
-**Dev/test:** The operator's default Keycloak client (`trusted-artifact-signer`)
-is **public** with `directAccessGrantsEnabled: true`. Use password grant with the
-pre-configured test user (`jdoe`/`secure`):
+**Password grant (public client):**
 
 ```groovy
 environment {
@@ -324,7 +316,10 @@ such as cloud-managed Kubernetes OIDC endpoints.
 |---------|---------------|----------|
 | `https://oidc.eks.*.amazonaws.com/id/*` | AWS EKS | EKS cluster OIDC |
 | `https://container.googleapis.com/v1/projects/*/locations/*/clusters/*` | GKE | GKE cluster OIDC |
-| `https://token.actions.githubusercontent.com` | GitHub | GitHub Actions OIDC |
+
+**Note:** GitHub Actions (`https://token.actions.githubusercontent.com`) is a
+regular OIDCIssuer in Fulcio's default config with type `github-workflow`, not a
+meta issuer. It does not use wildcards.
 
 Wildcard `*` matches a single path segment (no `/` or `.`).
 

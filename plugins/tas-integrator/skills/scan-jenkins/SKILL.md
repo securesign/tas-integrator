@@ -6,11 +6,14 @@ description: |
 
 # scan-jenkins
 
-Scans a Jenkins environment for TAS integration readiness. Connects to the
-Jenkins API (read-only), inspects installed plugins, pipeline configurations,
-credential stores, and network reachability. Evaluates gap detection rules,
-generates a blueprint using the Jenkins template with Jenkinsfile snippets,
-assigns confidence scores, and presents the result for review before export.
+Scan a Jenkins environment for TAS integration readiness. Connect to the
+Jenkins API (read-only), inspect installed plugins, pipeline configurations,
+credential stores, and network reachability. Evaluate gap detection rules from
+[`shared/knowledge-base/gap-detection-rules.md`](../../shared/knowledge-base/gap-detection-rules.md),
+generate a blueprint using
+[`shared/templates/jenkins-blueprint.md`](../../shared/templates/jenkins-blueprint.md)
+with Jenkinsfile snippets, assign confidence scores, and present the result
+for review before calling `/tas-integrator:export-blueprint`.
 
 ---
 
@@ -24,20 +27,20 @@ assigns confidence scores, and presents the result for review before export.
 
 ## Guardrails
 
-This skill operates in **read-only** mode. It MUST NOT modify the target Jenkins
-instance in any way.
+Operate in **read-only** mode. MUST NOT modify the target Jenkins instance in
+any way.
 
 | Constraint | Enforcement |
 |------------|-------------|
 | HTTP methods | `GET` only — no `POST`, `PUT`, `DELETE`, or `PATCH` requests to the Jenkins API |
-| Credentials | Used solely for API authentication — never stored, logged, or written to files |
-| Jenkins configuration | Never modified — no job creation, plugin installation, or settings changes |
-| File system | Only writes the final blueprint file (when `save` or `both` output mode is used) |
-| Network | Only connects to the Jenkins API URL and TAS endpoint URLs for health checks |
+| Credentials | Use solely for API authentication — never store, log, or write to files |
+| Jenkins configuration | Never modify — no job creation, plugin installation, or settings changes |
+| File system | Only write the final blueprint file (when `save` or `both` output mode is used) |
+| Network | Only connect to the Jenkins API URL and TAS endpoint URLs for health checks |
 
-The skill MUST NOT attempt to read credential values — the Jenkins API does not
-expose them via `GET`, and attempting to do so would violate the read-only
-guardrail. Only credential metadata (ID, type, description) is read.
+MUST NOT attempt to read credential values — the Jenkins API does not expose
+them via `GET`, and attempting to do so would violate the read-only guardrail.
+Read only credential metadata (ID, type, description).
 
 If any step would require a non-`GET` request to Jenkins, skip that check and
 record the gap as `skip` with a note explaining that write access is not
@@ -47,43 +50,42 @@ permitted.
 
 ## Inputs
 
-The caller provides Jenkins connection details and optional TAS endpoint
-overrides.
+Collect Jenkins connection details and optional TAS endpoint overrides.
 
 ### Required
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `jenkins_url` | string | Jenkins server base URL (e.g. `https://jenkins.example.com`) |
+| `jenkins_url` | string | Set Jenkins server base URL (e.g. `https://jenkins.example.com`) |
 
 ### Optional
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `jenkins_user` | string | — | Username for Jenkins API authentication |
-| `jenkins_token` | string | — | API token or password for authentication |
-| `namespace` | string | — | Kubernetes/OpenShift namespace where TAS is deployed |
+| `jenkins_user` | string | — | Set username for Jenkins API authentication |
+| `jenkins_token` | string | — | Set API token or password for authentication |
+| `namespace` | string | — | Set Kubernetes/OpenShift namespace where TAS is deployed |
 | `rekor_url` | string | auto-detect | Override Rekor endpoint URL |
 | `fulcio_url` | string | auto-detect | Override Fulcio endpoint URL |
 | `tuf_url` | string | auto-detect | Override TUF endpoint URL |
 | `tsa_url` | string | auto-detect | Override TSA endpoint URL |
 | `oidc_issuer` | string | auto-detect | Override OIDC issuer URL |
 | `oidc_client_id` | string | auto-detect | Override OIDC client ID |
-| `output` | string | `display` | Output mode: `display`, `save`, or `both` |
-| `format` | string | `markdown` | Output format: `markdown` or `yaml` |
-| `output_path` | string | auto-generated | File path for `save` and `both` modes |
+| `output` | string | `display` | Set output mode: `display`, `save`, or `both` |
+| `format` | string | `markdown` | Set output format: `markdown` or `yaml` |
+| `output_path` | string | auto-generated | Set file path for `save` and `both` modes |
 
 ### Authentication
 
-If `jenkins_user` and `jenkins_token` are provided, use HTTP Basic
-authentication for all Jenkins API requests:
+When `jenkins_user` and `jenkins_token` are provided, send HTTP Basic
+authentication on all Jenkins API requests:
 
 ```
 Authorization: Basic base64(jenkins_user:jenkins_token)
 ```
 
-If credentials are not provided, attempt unauthenticated access. If a `403` or
-`401` response is received, prompt the user for credentials before retrying.
+If credentials are not provided, try unauthenticated access. On a `403` or
+`401` response, prompt the user for credentials and retry.
 
 ---
 
@@ -96,9 +98,7 @@ If credentials are not provided, attempt unauthenticated access. If a `403` or
 3. Extract Jenkins version from the `X-Jenkins` response header.
 4. Extract the Java version from `GET {{jenkins_url}}/systemInfo` (requires
    authentication — if unavailable, record as unknown).
-5. Record:
-   - `jenkins_version` — e.g. `2.426.3`
-   - `java_version` — e.g. `17.0.9`
+5. Store `jenkins_version` (e.g. `2.426.3`) and `java_version` (e.g. `17.0.9`).
 
 ### Step 2 — Scan Installed Plugins
 
@@ -107,20 +107,18 @@ If credentials are not provided, attempt unauthenticated access. If a `403` or
 2. Extract each plugin's `shortName`, `version`, and `active` status.
 3. Check for TAS-relevant plugins:
 
-| Plugin | Short Name | Purpose |
-|--------|------------|---------|
-| Pipeline | `workflow-aggregator` | Declarative/Scripted pipeline support |
-| Credentials | `credentials` | Credential storage |
+| Plugin | Short Name | Use to |
+|--------|------------|--------|
+| Pipeline | `workflow-aggregator` | Run declarative/scripted pipelines |
+| Credentials | `credentials` | Store credentials |
 | Credentials Binding | `credentials-binding` | Inject credentials into build steps |
-| Docker Pipeline | `docker-workflow` | Docker build and push steps |
-| Pipeline Utility Steps | `pipeline-utility-steps` | File read/write in pipelines |
-| HTTP Request | `http_request` | HTTP calls from pipelines |
-| Git | `git` | SCM checkout |
+| Docker Pipeline | `docker-workflow` | Build and push Docker images |
+| Pipeline Utility Steps | `pipeline-utility-steps` | Read/write files in pipelines |
+| HTTP Request | `http_request` | Make HTTP calls from pipelines |
+| Git | `git` | Check out SCM repositories |
 
-4. Record the status of each plugin:
-   - `installed` and `active` — available
-   - `installed` but not `active` — disabled (gap)
-   - not installed — missing (gap)
+4. Classify each plugin: mark `installed` + `active` as available, mark
+   `installed` but inactive as disabled (gap), mark absent as missing (gap).
 
 ### Step 3 — Scan Pipeline Configurations
 
@@ -136,20 +134,18 @@ If credentials are not provided, attempt unauthenticated access. If a `403` or
 
 | Pattern | Indicates |
 |---------|-----------|
-| `cosign sign` | Signing step present |
-| `cosign verify` | Verification step present |
-| `cosign attest` | Attestation step present |
-| `cosign initialize` | TUF initialization present |
-| `--fulcio-url` | Fulcio endpoint configured |
-| `--rekor-url` | Rekor endpoint configured |
-| `--oidc-issuer` | OIDC issuer configured |
-| `--identity-token` | Identity token injection |
-| `COSIGN_REKOR_URL` | Rekor URL via environment variable |
+| `cosign sign` | Detect signing step |
+| `cosign verify` | Detect verification step |
+| `cosign attest` | Detect attestation step |
+| `cosign initialize` | Detect TUF initialization |
+| `--fulcio-url` | Detect Fulcio endpoint config |
+| `--rekor-url` | Detect Rekor endpoint config |
+| `--oidc-issuer` | Detect OIDC issuer config |
+| `--identity-token` | Detect identity token injection |
+| `COSIGN_REKOR_URL` | Detect Rekor URL via env var |
 
-4. Record:
-   - Total number of pipeline jobs scanned
-   - Which patterns were found and in which jobs
-   - Whether any signing, verification, or attestation steps exist
+4. Store the total pipeline jobs scanned, which patterns matched in which
+   jobs, and whether signing/verification/attestation steps exist.
 
 ### Step 4 — Scan Credential Store
 
@@ -164,39 +160,39 @@ If credentials are not provided, attempt unauthenticated access. If a `403` or
 
 | Pattern | Indicates |
 |---------|-----------|
-| `cosign`, `sigstore` | Cosign-related credential |
-| `rekor`, `fulcio`, `tsa`, `tuf` | TAS endpoint credential |
-| `oidc`, `keycloak`, `sso` | OIDC-related credential |
-| `registry`, `docker`, `quay` | Container registry credential |
+| `cosign`, `sigstore` | Flag as Cosign-related credential |
+| `rekor`, `fulcio`, `tsa`, `tuf` | Flag as TAS endpoint credential |
+| `oidc`, `keycloak`, `sso` | Flag as OIDC-related credential |
+| `registry`, `docker`, `quay` | Flag as container registry credential |
 
-4. Record which credential types are present and which are missing.
+4. Store which credential types are present and which are missing.
 
-**Note:** The skill reads only credential metadata (ID, type, description), not
+**Note:** Read only credential metadata (ID, type, description) — never read
 values (see Guardrails).
 
 ### Step 5 — Detect TAS Endpoints
 
-Attempt to discover TAS endpoint URLs. Use explicit overrides from the input
-parameters if provided. Otherwise, try auto-detection in this order:
+Discover TAS endpoint URLs. Use explicit overrides from the input parameters
+if provided. Otherwise, attempt auto-detection in this order:
 
 #### 5a — From Jenkins Environment Variables
 
-Send `GET {{jenkins_url}}/env` or inspect pipeline environment blocks for
+Run `GET {{jenkins_url}}/env` or inspect pipeline environment blocks for
 variables matching:
 
-| Variable | Maps To |
-|----------|---------|
-| `TAS_REKOR_URL` or `COSIGN_REKOR_URL` | `rekor_url` |
-| `TAS_FULCIO_URL` | `fulcio_url` |
-| `TAS_TUF_URL` | `tuf_url` |
-| `TAS_TSA_URL` | `tsa_url` |
-| `TAS_OIDC_ISSUER` | `oidc_issuer` |
-| `TAS_OIDC_CLIENT_ID` | `oidc_client_id` |
+| Variable | Set |
+|----------|-----|
+| `TAS_REKOR_URL` or `COSIGN_REKOR_URL` | Set `rekor_url` |
+| `TAS_FULCIO_URL` | Set `fulcio_url` |
+| `TAS_TUF_URL` | Set `tuf_url` |
+| `TAS_TSA_URL` | Set `tsa_url` |
+| `TAS_OIDC_ISSUER` | Set `oidc_issuer` |
+| `TAS_OIDC_CLIENT_ID` | Set `oidc_client_id` |
 
 #### 5b — From Kubernetes / OpenShift (if `namespace` provided)
 
-If a `namespace` is provided and `kubectl` is available, discover endpoints
-from the Securesign CR status fields:
+If `namespace` is provided and `kubectl` is available, extract endpoints from
+the Securesign CR status fields:
 
 ```bash
 REKOR_URL=$(kubectl get securesign -n {{namespace}} \
@@ -211,12 +207,12 @@ TSA_URL=$(kubectl get securesign -n {{namespace}} \
 
 #### 5c — From RHEL Configuration
 
-If the Jenkins controller runs on RHEL, check for `/etc/rhtas/` directory
-presence as an indicator of an Ansible-deployed TAS instance.
+If the Jenkins controller runs on RHEL, check for the `/etc/rhtas/` directory
+to detect an Ansible-deployed TAS instance.
 
 #### 5d — Endpoint Health Checks
 
-For every discovered endpoint, validate reachability:
+Run a health check for every discovered endpoint:
 
 | Component | Health Check | Expected |
 |-----------|-------------|----------|
@@ -225,12 +221,12 @@ For every discovered endpoint, validate reachability:
 | TSA | `GET {{tsa_url}}/api/v1/timestamp/certchain` | HTTP 200 |
 | TUF | `GET {{tuf_url}}/root.json` | HTTP 200 |
 
-Record pass/fail for each endpoint health check.
+Store pass/fail for each endpoint check.
 
 ### Step 6 — Evaluate Gap Detection Rules
 
-Evaluate all 24 rules from [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md)
-against the data collected in Steps 1–5. For each rule, record:
+Run all 24 rules from [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md)
+against the data collected in Steps 1–5. Record for each rule:
 
 | Field | Value |
 |-------|-------|
@@ -242,21 +238,21 @@ against the data collected in Steps 1–5. For each rule, record:
 
 #### Rule Evaluation Sources
 
-| Rule Category | Data Source |
-|---------------|------------|
-| `INFRA` | Step 5 endpoint discovery and health checks |
-| `OIDC` | Step 3 pipeline patterns + Step 5 environment variables |
-| `SIGN` | Step 3 pipeline patterns |
-| `VERIFY` | Step 3 pipeline patterns |
-| `POLICY` | Step 5b Kubernetes CRD check (if available) |
-| `SUPPLY` | Step 3 pipeline patterns (SBOM tools, attestation commands) |
+| Rule Category | Evaluate Using |
+|---------------|----------------|
+| `INFRA` | Use Step 5 endpoint discovery and health checks |
+| `OIDC` | Use Step 3 pipeline patterns + Step 5 environment variables |
+| `SIGN` | Use Step 3 pipeline patterns |
+| `VERIFY` | Use Step 3 pipeline patterns |
+| `POLICY` | Use Step 5b Kubernetes CRD check (if available) |
+| `SUPPLY` | Use Step 3 pipeline patterns (SBOM tools, attestation commands) |
 
-Rules that cannot be evaluated because the required data source is unavailable
-(e.g., no `kubectl` access for POLICY rules) are recorded as `skip`.
+Mark rules as `skip` when the required data source is unavailable (e.g., no
+`kubectl` access for POLICY rules).
 
 ### Step 7 — Compute Confidence Scores
 
-Calculate confidence scores using the weights defined in
+Compute confidence scores using the weights from
 [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md):
 
 | Score | Weight | Calculation |
@@ -265,7 +261,7 @@ Calculate confidence scores using the weights defined in
 | Compatibility | 30% | Passed SIGN + VERIFY rules / total SIGN + VERIFY rules |
 | Overall | 30% | All passed rules (including POLICY + SUPPLY) / total rules |
 
-Map the weighted percentages to labels:
+Convert the weighted percentages to labels:
 
 | Percentage | Label |
 |------------|-------|
@@ -273,18 +269,17 @@ Map the weighted percentages to labels:
 | 50–79% | `Medium` |
 | 0–49% | `Low` |
 
-Record:
-- `overall_confidence` and `overall_details`
-- `detection_confidence` and `detection_details`
-- `compatibility_confidence` and `compatibility_details`
+Store `overall_confidence`/`overall_details`,
+`detection_confidence`/`detection_details`, and
+`compatibility_confidence`/`compatibility_details`.
 
 ### Step 8 — Generate Blueprint Data
 
-Assemble the blueprint data object that the `export-blueprint` skill consumes.
+Build the blueprint data object for the `export-blueprint` skill.
 
 #### 8a — Header Data
 
-Populate from scan results:
+Set from scan results:
 
 | Field | Source |
 |-------|--------|
@@ -302,53 +297,57 @@ Populate from scan results:
 
 #### 8b — Platform Data
 
-Populate placeholders for [shared/templates/jenkins-blueprint.md](../../shared/templates/jenkins-blueprint.md):
+Fill placeholders for [shared/templates/jenkins-blueprint.md](../../shared/templates/jenkins-blueprint.md):
 
 | Placeholder | Source |
 |-------------|--------|
-| `jenkins_version_status` | Step 1 — `OK` if version detected, `Unknown` otherwise |
-| `jenkins_version_details` | Step 1 — version string |
-| `java_version_status` | Step 1 — `OK` if Java 11+, `Warning` if older |
-| `java_version_details` | Step 1 — version string |
-| `network_status` | Step 5d — `OK` if all endpoints reachable |
-| `network_details` | Step 5d — summary of reachable/unreachable endpoints |
-| `tas_server_status` | Step 5 — `OK` if at least Fulcio + Rekor detected |
-| `tas_server_details` | Step 5 — deployment method and endpoints |
-| `oidc_status` | Step 6 OIDC rules — `OK` if OIDC-001 and OIDC-002 pass |
-| `oidc_details` | Step 6 — OIDC issuer and client ID if detected |
-| `plugin_name` | Step 2 — one row per required plugin |
-| `plugin_version` | Step 2 — installed version or `Not installed` |
-| `plugin_purpose` | Step 2 — plugin purpose from the table in Step 2 |
-| `plugin_installation_steps` | Generated installation commands for missing plugins |
-| `credential_id` | Step 4 — one row per required credential |
-| `credential_type` | Step 4 — credential type |
-| `credential_scope` | `Global` (default) |
-| `credential_description` | Step 4 — credential purpose |
-| `credential_configuration_steps` | Generated credential setup instructions |
-| `signing_stage_snippet` | Jenkinsfile signing stage using detected endpoints |
-| `verification_stage_snippet` | Jenkinsfile verification stage |
-| `attestation_stage_snippet` | Jenkinsfile attestation stage |
-| `full_pipeline_example` | Complete Jenkinsfile combining all stages |
-| `validation_command` | One row per validation command |
-| `validation_purpose` | Command purpose |
-| `validation_expected` | Expected output |
-| `checklist_item` | One row per post-integration checklist item |
+| `jenkins_version_status` | Set from Step 1 — `OK` if detected, `Unknown` otherwise |
+| `jenkins_version_details` | Set from Step 1 — version string |
+| `java_version_status` | Set from Step 1 — `OK` if Java 11+, `Warning` if older |
+| `java_version_details` | Set from Step 1 — version string |
+| `network_status` | Set from Step 5d — `OK` if all endpoints reachable |
+| `network_details` | Set from Step 5d — summarize reachable/unreachable endpoints |
+| `tas_server_status` | Set from Step 5 — `OK` if at least Fulcio + Rekor detected |
+| `tas_server_details` | Set from Step 5 — include deployment method and endpoints |
+| `oidc_status` | Set from Step 6 OIDC rules — `OK` if OIDC-001 and OIDC-002 pass |
+| `oidc_details` | Set from Step 6 — include OIDC issuer and client ID if detected |
+| `plugin_name` | Set from Step 2 — add one row per required plugin |
+| `plugin_version` | Set from Step 2 — use installed version or `Not installed` |
+| `plugin_purpose` | Set from Step 2 — use plugin purpose from the table in Step 2 |
+| `plugin_installation_steps` | Generate `jenkins-cli install-plugin` commands for missing plugins |
+
+##### Credential, Pipeline & Validation Placeholders
+
+| Placeholder | Source |
+|-------------|--------|
+| `credential_id` | Set from Step 4 — add one row per required credential |
+| `credential_type` | Set from Step 4 — use credential type |
+| `credential_scope` | Set to `Global` (default) |
+| `credential_description` | Set from Step 4 — describe credential purpose |
+| `credential_configuration_steps` | Generate credential setup instructions |
+| `signing_stage_snippet` | Generate Jenkinsfile signing stage using detected endpoints |
+| `verification_stage_snippet` | Generate Jenkinsfile verification stage |
+| `attestation_stage_snippet` | Generate Jenkinsfile attestation stage |
+| `full_pipeline_example` | Generate complete Jenkinsfile combining all stages |
+| `validation_command` | Add one row per validation command |
+| `validation_purpose` | Describe command purpose |
+| `validation_expected` | Describe expected output |
+| `checklist_item` | Add one row per post-integration checklist item |
 
 #### Jenkinsfile Snippet Generation
 
-Use patterns from [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) and
-[shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) (Jenkins section) to generate Groovy
-pipeline snippets.
+Generate Groovy pipeline snippets using patterns from
+[shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) and
+[shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) (Jenkins section).
 
-**Signing stage:**
+Generate the signing stage — run `cosign initialize` then `cosign sign`:
 
 ```groovy
 stage('Sign Image') {
     steps {
         script {
-            // Production: client_credentials grant (requires confidential client
-            // in Keycloak — set publicClient: false, serviceAccountsEnabled: true)
-            // Dev/test: replace with grant_type=password using OIDC_USER/OIDC_PASSWORD
+            // Confidential client: use grant_type=client_credentials with OIDC_CLIENT_SECRET
+            // Public client: use grant_type=password with OIDC_USER/OIDC_PASSWORD
             def IDENTITY_TOKEN = sh(
                 script: """
                     curl -s -X POST \
@@ -380,7 +379,7 @@ stage('Sign Image') {
 }
 ```
 
-**Verification stage:**
+Generate the verification stage — run `cosign verify` with certificate identity:
 
 ```groovy
 stage('Verify Image') {
@@ -396,7 +395,7 @@ stage('Verify Image') {
 }
 ```
 
-**Attestation stage:**
+Generate the attestation stage — run `cosign attest` with SBOM predicates:
 
 ```groovy
 stage('Attest Image') {
@@ -431,21 +430,21 @@ stage('Attest Image') {
 }
 ```
 
-Substitute detected endpoint URLs for the environment variable references when
-endpoints are known. When endpoints are not detected, keep the environment
-variable references so the user can configure them.
+Substitute detected endpoint URLs for environment variable references when
+known. Keep variable references when endpoints are not detected so the user
+can configure them manually.
 
 #### 8c — Gaps Data
 
-Pass the evaluated gap results from Step 6 as the `gaps` array.
+Include the evaluated gap results from Step 6 as the `gaps` array.
 
 #### 8d — Endpoints Data
 
-Pass the discovered endpoints from Step 5 as the `endpoints` object.
+Include the discovered endpoints from Step 5 as the `endpoints` object.
 
 ### Step 9 — Present for Review
 
-Before exporting the blueprint, present a summary to the user for review:
+Display a summary to the user for review before exporting the blueprint:
 
 ```
 ## Scan Summary
@@ -484,17 +483,17 @@ Before exporting the blueprint, present a summary to the user for review:
 | TUF | {{tuf_url}} or Not detected | Healthy / Unreachable / — |
 ```
 
-Ask the user:
+Prompt the user:
 
 > "Review the scan results above. Would you like to proceed with blueprint
 > generation, adjust any findings, or re-scan with different parameters?"
 
-Wait for user confirmation before proceeding to Step 10.
+Wait for confirmation before proceeding to Step 10.
 
 ### Step 10 — Export Blueprint
 
-Invoke the `export-blueprint` skill with the assembled blueprint data object
-from Step 8, passing the output parameters specified by the user:
+Call `export-blueprint` with the assembled blueprint data from Step 8 and the
+user's output parameters:
 
 ```
 /tas-integrator:export-blueprint --output={{output}} --format={{format}}
@@ -506,26 +505,26 @@ Blueprint data:
 - endpoints: (assembled in Step 8d)
 ```
 
-The export-blueprint skill handles template rendering, gap assessment summary,
+Let `export-blueprint` handle template rendering, gap assessment summary,
 validation command summary, metadata block, and output formatting.
 
 ---
 
 ## Jenkins API Reference
 
-All API calls use `GET` requests with the `/api/json` suffix for JSON responses.
+Send `GET` requests with the `/api/json` suffix for JSON responses.
 
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /api/json` | Server info and top-level job list |
-| `GET /pluginManager/api/json?depth=2` | Installed plugins with details |
-| `GET /credentials/store/system/domain/_/api/json?depth=2` | System credential metadata |
-| `GET /job/{{job_name}}/api/json` | Job details |
-| `GET /job/{{job_name}}/config.xml` | Job configuration (pipeline script) |
-| `GET /systemInfo` | System properties including Java version |
-| `GET /queue/api/json` | Build queue (used to verify API access) |
+| Endpoint | Use to |
+|----------|--------|
+| `GET /api/json` | Retrieve server info and top-level job list |
+| `GET /pluginManager/api/json?depth=2` | List installed plugins with details |
+| `GET /credentials/store/system/domain/_/api/json?depth=2` | List system credential metadata |
+| `GET /job/{{job_name}}/api/json` | Retrieve job details |
+| `GET /job/{{job_name}}/config.xml` | Retrieve job configuration (pipeline script) |
+| `GET /systemInfo` | Retrieve system properties including Java version |
+| `GET /queue/api/json` | Verify API access via build queue |
 
-All endpoints support the `tree` query parameter for field filtering:
+Filter fields with the `tree` query parameter:
 
 ```
 GET /api/json?tree=jobs[name,url,color]
@@ -535,38 +534,40 @@ GET /api/json?tree=jobs[name,url,color]
 
 ## Knowledge Base References
 
-This skill draws from the following knowledge base files during scanning:
+Read these knowledge-base files during scanning:
 
-| File | Usage |
-|------|-------|
-| [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md) | Rule definitions for all 24 gap checks across 6 categories |
-| [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) | Cosign CLI flags and command patterns for Jenkinsfile snippet generation |
-| [shared/knowledge-base/tas-endpoint-config.md](../../shared/knowledge-base/tas-endpoint-config.md) | Endpoint URL formats, health check commands, and CI/CD variable mapping |
-| [shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) | OIDC issuer types, Keycloak integration, and Jenkins token injection patterns |
-| [shared/knowledge-base/deployment-patterns.md](../../shared/knowledge-base/deployment-patterns.md) | OpenShift operator and RHEL Ansible deployment detection indicators |
+| File | Read to |
+|------|---------|
+| [`shared/knowledge-base/gap-detection-rules.md`](../../shared/knowledge-base/gap-detection-rules.md) | Evaluate all 24 gap checks across 6 categories |
+| [`shared/knowledge-base/cosign-signing-patterns.md`](../../shared/knowledge-base/cosign-signing-patterns.md) | Generate Jenkinsfile snippets with correct `cosign` CLI flags |
+| [`shared/knowledge-base/tas-endpoint-config.md`](../../shared/knowledge-base/tas-endpoint-config.md) | Map endpoint URLs, run health checks, and set CI/CD variables |
+| [`shared/knowledge-base/oidc-setup.md`](../../shared/knowledge-base/oidc-setup.md) | Configure OIDC issuer, Keycloak integration, and Jenkins token injection |
+| [`shared/knowledge-base/deployment-patterns.md`](../../shared/knowledge-base/deployment-patterns.md) | Detect OpenShift operator and RHEL Ansible deployment indicators |
 
 ---
 
 ## Error Handling
 
-| Condition | Behaviour |
-|-----------|-----------|
-| Jenkins URL unreachable | Report connection error, stop |
-| Authentication required but credentials not provided | Prompt user for credentials, retry |
-| Authentication failed (401/403) | Report invalid credentials, stop |
-| Plugin API not accessible | Record plugin scan as skipped, continue with other steps |
-| Pipeline config.xml not readable | Skip that pipeline, continue scanning others |
-| Credential store not accessible | Record credential scan as skipped, continue |
-| TAS endpoints not detected | Use `{{placeholder}}` markers in blueprint, warn user |
-| `kubectl` not available for namespace scan | Skip operator detection, continue with other methods |
-| Health check timeout (>10s) | Record endpoint as unreachable, continue |
-| No pipeline jobs found | Record as gap (no signing steps), continue |
+| Condition | Action |
+|-----------|--------|
+| Jenkins URL unreachable | Report connection error and stop |
+| Authentication required but credentials not provided | Prompt user for `jenkins_user` and `jenkins_token`, then retry |
+| Authentication failed (401/403) | Report invalid credentials and stop |
+| Plugin API not accessible | Skip plugin scan, log gap, continue with other steps |
+| Pipeline `config.xml` not readable | Skip that pipeline, log gap, continue scanning others |
+| Credential store not accessible | Skip credential scan, log gap, continue |
+| TAS endpoints not detected | Insert `{{placeholder}}` markers in blueprint, warn user |
+| `kubectl` not available for namespace scan | Skip operator detection, log gap, continue with other methods |
+| Health check timeout (>10s) | Mark endpoint as unreachable, log gap, continue |
+| No pipeline jobs found | Record gap (no signing steps found), continue |
 
 ---
 
 ## Examples
 
 ### Basic Scan (Display Only)
+
+Run a scan and display results in the conversation:
 
 ```
 /tas-integrator:scan-jenkins
@@ -578,6 +579,8 @@ Token: 11a2b3c4d5e6f7
 
 ### Scan with TAS Namespace
 
+Run a scan and auto-detect endpoints from the Securesign CR in the namespace:
+
 ```
 /tas-integrator:scan-jenkins
 
@@ -588,6 +591,8 @@ Namespace: trusted-artifact-signer
 ```
 
 ### Scan with Explicit Endpoints and YAML Save
+
+Override endpoint URLs and write the blueprint as YAML:
 
 ```
 /tas-integrator:scan-jenkins --output=save --format=yaml
@@ -601,6 +606,8 @@ TUF URL: https://tuf.tas.example.com
 ```
 
 ### Scan with Display and Save
+
+Display the blueprint and save it to a custom output path:
 
 ```
 /tas-integrator:scan-jenkins --output=both --output_path=./reports/jenkins-scan.md

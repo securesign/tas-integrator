@@ -21,7 +21,7 @@ and Fulcio/Rekor/TSA URL formats.
 
 ## Operator CRD Status Fields
 
-The `securesign.dev/v1alpha1` `Securesign` custom resource exposes component
+The `rhtas.redhat.com/v1` `Securesign` custom resource exposes component
 URLs in its status fields. The TAS operator reconciles these URLs after
 deployment.
 
@@ -34,7 +34,7 @@ type SecuresignSpec struct {
     Trillian           TrillianSpec
     Tuf                TufSpec
     Ctlog              CTlogSpec
-    TimestampAuthority TimestampAuthoritySpec
+    TimestampAuthority *TimestampAuthoritySpec
 }
 ```
 
@@ -43,10 +43,10 @@ type SecuresignSpec struct {
 ```go
 type SecuresignStatus struct {
     Conditions []metav1.Condition
-    Rekor      SecuresignRekorStatus
-    Fulcio     SecuresignFulcioStatus
-    Tuf        SecuresignTufStatus
-    TSA        SecuresignTSAStatus
+    RekorStatus  SecuresignRekorStatus
+    FulcioStatus SecuresignFulcioStatus
+    TufStatus    SecuresignTufStatus
+    TSAStatus    SecuresignTSAStatus
 }
 ```
 
@@ -142,6 +142,13 @@ initialized with the TAS TUF root:
 cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/root.json
 ```
 
+An optional `--root-checksum` flag verifies the root.json integrity:
+
+```bash
+cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/root.json \
+  --root-checksum={{expected_sha256}}
+```
+
 This configures cosign to trust the TAS instance's Fulcio CA, Rekor public
 key, and CT log key.
 
@@ -182,9 +189,9 @@ Map TAS endpoint URLs to cosign CLI flags and environment variables:
 
 | Endpoint | CLI Flag | Environment Variable |
 |----------|----------|---------------------|
-| Fulcio URL | `--fulcio-url` | _(none — use flag)_ |
+| Fulcio URL | `--fulcio-url` | `COSIGN_FULCIO_URL` |
 | Rekor URL | `--rekor-url` | `COSIGN_REKOR_URL` |
-| TSA URL | `--tsa-url` | _(none — use flag)_ |
+| TSA URL | `--timestamp-server-url` | _(none — use flag)_ |
 | OIDC Issuer | `--oidc-issuer` | _(none — use flag)_ |
 | OIDC Client ID | `--oidc-client-id` | _(none — use flag)_ |
 
