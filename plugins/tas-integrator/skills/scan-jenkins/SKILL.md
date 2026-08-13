@@ -346,9 +346,8 @@ Generate the signing stage — run `cosign initialize` then `cosign sign`:
 stage('Sign Image') {
     steps {
         script {
-            // Production: client_credentials grant (requires confidential client
-            // in Keycloak — set publicClient: false, serviceAccountsEnabled: true)
-            // Dev/test: replace with grant_type=password using OIDC_USER/OIDC_PASSWORD
+            // Confidential client: use grant_type=client_credentials with OIDC_CLIENT_SECRET
+            // Public client: use grant_type=password with OIDC_USER/OIDC_PASSWORD
             def IDENTITY_TOKEN = sh(
                 script: """
                     curl -s -X POST \
