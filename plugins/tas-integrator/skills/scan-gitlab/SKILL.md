@@ -218,7 +218,7 @@ variable patterns listed above.
 #### 5c — From Kubernetes / OpenShift (if `namespace` provided)
 
 If `namespace` is provided and `kubectl` is available, extract endpoints from
-the Securesign CR status fields:
+individual component CRD status fields:
 
 ```bash
 REKOR_URL=$(kubectl get rekor -n {{namespace}} \
@@ -244,7 +244,7 @@ Run a health check for every discovered endpoint:
 |-----------|-------------|----------|
 | Fulcio | `GET {{fulcio_url}}/healthz` | HTTP 200 |
 | Rekor | `GET {{rekor_url}}/api/v1/log` | HTTP 200 |
-| TSA | `GET {{tsa_url}}/api/v1/timestamp/certchain` | HTTP 200 |
+| TSA | `GET {{tsa_url}}/certchain` | HTTP 200 |
 | TUF | `GET {{tuf_url}}/root.json` | HTTP 200 |
 
 Store pass/fail for each endpoint check.

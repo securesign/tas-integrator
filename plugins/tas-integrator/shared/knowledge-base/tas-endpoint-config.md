@@ -14,6 +14,7 @@ and Fulcio/Rekor/TSA URL formats.
 | Rekor | Transparency log server | `/api/v1/log/entries` |
 | Timestamp Authority | RFC 3161 timestamp server | `/api/v1/timestamp` |
 | TUF | The Update Framework root distribution | `/root.json` |
+| Console | RHTAS web console (UI + API) | N/A (standalone CRD, not in SecuresignSpec) |
 | CT Log | Certificate transparency log | N/A (internal to Fulcio) |
 | Trillian | Merkle tree log backend | N/A (internal to Rekor) |
 
@@ -29,24 +30,27 @@ deployment.
 
 ```go
 type SecuresignSpec struct {
-    Rekor              RekorSpec
-    Fulcio             FulcioSpec
-    Trillian           TrillianSpec
-    Tuf                TufSpec
-    Ctlog              CTlogSpec
-    TimestampAuthority *TimestampAuthoritySpec
+    Rekor              RekorSpec               `json:"rekor,omitempty"`
+    Fulcio             FulcioSpec              `json:"fulcio"`
+    Trillian           TrillianSpec            `json:"trillian,omitempty"`
+    Tuf                TufSpec                 `json:"tuf,omitempty"`
+    Ctlog              CTlogSpec               `json:"ctlog,omitempty"`
+    TimestampAuthority *TimestampAuthoritySpec `json:"tsa,omitempty"`
 }
 ```
+
+JSON tags matter for kubectl: use `{.spec.tsa}` not `{.spec.timestampAuthority}`.
+`Fulcio` is the only required field (no `omitempty`).
 
 ### SecuresignStatus (Observed State)
 
 ```go
 type SecuresignStatus struct {
-    Conditions []metav1.Condition
-    RekorStatus  SecuresignRekorStatus
-    FulcioStatus SecuresignFulcioStatus
-    TufStatus    SecuresignTufStatus
-    TSAStatus    SecuresignTSAStatus
+    Conditions   []metav1.Condition     `json:"conditions,omitempty"`
+    RekorStatus  SecuresignRekorStatus  `json:"rekor,omitempty"`
+    FulcioStatus SecuresignFulcioStatus `json:"fulcio,omitempty"`
+    TufStatus    SecuresignTufStatus    `json:"tuf,omitempty"`
+    TSAStatus    SecuresignTSAStatus    `json:"tsa,omitempty"`
 }
 ```
 
@@ -57,26 +61,31 @@ type SecuresignStatus struct {
 | `SecuresignRekorStatus` | `Url string` | Rekor server base URL |
 | `SecuresignFulcioStatus` | `Url string` | Fulcio server base URL |
 | `SecuresignTufStatus` | `Url string` | TUF mirror base URL |
-| `SecuresignTSAStatus` | `Url string` | Timestamp Authority base URL |
+| `SecuresignTSAStatus` | `Url string` | Timestamp Authority URL |
 
 ### Discovering Endpoint URLs from the Operator
 
+Individual component CRDs are the recommended discovery method (more robust than
+the parent Securesign CR, which may not always be present):
+
 ```bash
-# Get all TAS component URLs from the Securesign CR status
+REKOR_URL=$(kubectl get rekor -n {{namespace}} \
+  -o jsonpath='{.items[0].status.url}')
+
+FULCIO_URL=$(kubectl get fulcio -n {{namespace}} \
+  -o jsonpath='{.items[0].status.url}')
+
+TUF_URL=$(kubectl get tuf -n {{namespace}} \
+  -o jsonpath='{.items[0].status.url}')
+
+TSA_URL=$(kubectl get timestampauthority -n {{namespace}} \
+  -o jsonpath='{.items[0].status.url}')
+```
+
+Alternatively, the parent Securesign CR exposes all URLs:
+
+```bash
 kubectl get securesign -n {{namespace}} -o jsonpath='{.items[0].status}'
-
-# Get individual component URLs
-REKOR_URL=$(kubectl get securesign -n {{namespace}} \
-  -o jsonpath='{.items[0].status.rekor.url}')
-
-FULCIO_URL=$(kubectl get securesign -n {{namespace}} \
-  -o jsonpath='{.items[0].status.fulcio.url}')
-
-TUF_URL=$(kubectl get securesign -n {{namespace}} \
-  -o jsonpath='{.items[0].status.tuf.url}')
-
-TSA_URL=$(kubectl get securesign -n {{namespace}} \
-  -o jsonpath='{.items[0].status.tsa.url}')
 ```
 
 ---
@@ -111,15 +120,17 @@ Health check: `GET {{rekor_url}}/api/v1/log`
 
 ### Timestamp Authority (TSA)
 
+The operator status URL (`status.tsa.url`) includes the `/api/v1/timestamp`
+path suffix. All `{{tsa_url}}` references assume this full URL.
+
 | Format | Example |
 |--------|---------|
-| OpenShift Route | `https://tsa-server-<namespace>.apps.<cluster-domain>` |
-| Kubernetes Ingress | `https://tsa.<domain>` |
-| Port-forward (dev) | `http://localhost:3002` |
+| Operator status / Ingress | `https://tsa-server-<namespace>.apps.<cluster-domain>/api/v1/timestamp` |
+| Port-forward (dev) | `http://localhost:3002/api/v1/timestamp` |
 
-Timestamp endpoint: `POST {{tsa_url}}/api/v1/timestamp`
+Timestamp endpoint: `POST {{tsa_url}}`
 
-Health check: `GET {{tsa_url}}/api/v1/timestamp/certchain`
+Health check: `GET {{tsa_url}}/certchain`
 
 ### TUF
 
@@ -166,7 +177,7 @@ curl -s -o /dev/null -w "%{http_code}" {{fulcio_url}}/healthz
 curl -s -o /dev/null -w "%{http_code}" {{rekor_url}}/api/v1/log
 
 # Validate TSA is reachable (returns certificate chain)
-curl -s -o /dev/null -w "%{http_code}" {{tsa_url}}/api/v1/timestamp/certchain
+curl -s -o /dev/null -w "%{http_code}" {{tsa_url}}/certchain
 
 # Validate TUF root is downloadable
 curl -s -o /dev/null -w "%{http_code}" {{tuf_url}}/root.json
@@ -178,7 +189,7 @@ curl -s -o /dev/null -w "%{http_code}" {{tuf_url}}/root.json
 |----------|---------|---------|
 | Fulcio `/healthz` | 200 | Server is healthy |
 | Rekor `/api/v1/log` | 200 | Log info returned |
-| TSA `/api/v1/timestamp/certchain` | 200 | Certificate chain returned |
+| TSA `{{tsa_url}}/certchain` | 200 | Certificate chain returned |
 | TUF `/root.json` | 200 | Root metadata available |
 
 ---
@@ -201,7 +212,7 @@ Map TAS endpoint URLs to cosign CLI flags and environment variables:
 |---------------|-------|-------------|
 | `TAS_REKOR_URL` | `{{rekor_url}}` | Rekor server base URL |
 | `TAS_FULCIO_URL` | `{{fulcio_url}}` | Fulcio server base URL |
-| `TAS_TSA_URL` | `{{tsa_url}}` | Timestamp Authority base URL |
+| `TAS_TSA_URL` | `{{tsa_url}}` | Timestamp Authority URL |
 | `TAS_TUF_URL` | `{{tuf_url}}` | TUF mirror base URL |
 | `TAS_OIDC_ISSUER` | `{{oidc_issuer}}` | OIDC token issuer URL |
 | `TAS_OIDC_CLIENT_ID` | `{{oidc_client_id}}` | OIDC client ID |
@@ -225,7 +236,7 @@ FULCIO_URL=https://$(kubectl get route fulcio-server -n {{namespace}} \
   -o jsonpath='{.spec.host}')
 
 TSA_URL=https://$(kubectl get route tsa-server -n {{namespace}} \
-  -o jsonpath='{.spec.host}')
+  -o jsonpath='{.spec.host}')/api/v1/timestamp
 
 TUF_URL=https://$(kubectl get route tuf -n {{namespace}} \
   -o jsonpath='{.spec.host}')
