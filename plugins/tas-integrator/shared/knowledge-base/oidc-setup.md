@@ -35,7 +35,7 @@ Fulcio supports the following issuer types (from `pkg/config/config.go`):
 
 ## Fulcio OIDC Configuration Structure
 
-### OIDCIssuer Fields (Fulcio Server)
+### OIDCIssuer Fields (Fulcio Server Config Only)
 
 From Fulcio `pkg/config/config.go`, each OIDC issuer entry includes:
 
@@ -53,6 +53,10 @@ From Fulcio `pkg/config/config.go`, each OIDC issuer entry includes:
 | `SkipEmailVerification` | No | Skip `email_verified` claim check (for providers like Microsoft Entra/ADFS) |
 | `Description` | No | Optional human-readable description for this issuer |
 | `Contact` | No | Optional email contact for the team managing this issuer |
+
+> **Important:** `CACert`, `SkipEmailVerification`, `Description`, and `Contact`
+> are Fulcio server-side fields only. They do NOT exist in the operator CRD —
+> see the operator table below for the CRD-specific subset.
 
 ### Operator CRD OIDCIssuer Fields
 

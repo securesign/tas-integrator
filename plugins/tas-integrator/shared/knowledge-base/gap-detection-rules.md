@@ -68,7 +68,7 @@ guidance.
 |-------|-------|
 | Severity | Medium |
 | Description | The Timestamp Authority should be reachable for RFC 3161 timestamps |
-| Detection | `GET {{tsa_url}}/api/v1/timestamp/certchain` returns HTTP 200 |
+| Detection | `GET {{tsa_url}}/certchain` returns HTTP 200 |
 | Pass Condition | Certificate chain returned |
 | Remediation | Verify TSA pod is running; TSA is optional but recommended |
 

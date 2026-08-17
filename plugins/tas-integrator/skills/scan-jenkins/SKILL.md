@@ -192,17 +192,17 @@ variables matching:
 #### 5b — From Kubernetes / OpenShift (if `namespace` provided)
 
 If `namespace` is provided and `kubectl` is available, extract endpoints from
-the Securesign CR status fields:
+individual component CRD status fields:
 
 ```bash
-REKOR_URL=$(kubectl get securesign -n {{namespace}} \
-  -o jsonpath='{.items[0].status.rekor.url}')
-FULCIO_URL=$(kubectl get securesign -n {{namespace}} \
-  -o jsonpath='{.items[0].status.fulcio.url}')
-TUF_URL=$(kubectl get securesign -n {{namespace}} \
-  -o jsonpath='{.items[0].status.tuf.url}')
-TSA_URL=$(kubectl get securesign -n {{namespace}} \
-  -o jsonpath='{.items[0].status.tsa.url}')
+REKOR_URL=$(kubectl get rekor -n {{namespace}} \
+  -o jsonpath='{.items[0].status.url}')
+FULCIO_URL=$(kubectl get fulcio -n {{namespace}} \
+  -o jsonpath='{.items[0].status.url}')
+TUF_URL=$(kubectl get tuf -n {{namespace}} \
+  -o jsonpath='{.items[0].status.url}')
+TSA_URL=$(kubectl get timestampauthority -n {{namespace}} \
+  -o jsonpath='{.items[0].status.url}')
 ```
 
 #### 5c — From RHEL Configuration
@@ -218,7 +218,7 @@ Run a health check for every discovered endpoint:
 |-----------|-------------|----------|
 | Fulcio | `GET {{fulcio_url}}/healthz` | HTTP 200 |
 | Rekor | `GET {{rekor_url}}/api/v1/log` | HTTP 200 |
-| TSA | `GET {{tsa_url}}/api/v1/timestamp/certchain` | HTTP 200 |
+| TSA | `GET {{tsa_url}}/certchain` | HTTP 200 |
 | TUF | `GET {{tuf_url}}/root.json` | HTTP 200 |
 
 Store pass/fail for each endpoint check.
