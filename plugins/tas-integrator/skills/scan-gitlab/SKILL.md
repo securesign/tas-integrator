@@ -335,6 +335,8 @@ Fill placeholders for [shared/templates/gitlab-ci-blueprint.md](../../shared/tem
 | `network_details` | Set from Step 5e — summarize reachable/unreachable endpoints |
 | `tas_server_status` | Set from Step 5 — `OK` if at least Fulcio + Rekor detected |
 | `tas_server_details` | Set from Step 5 — include deployment method and endpoints |
+| `cosign_cli_status` | Set from Step 6 INFRA-006 — `OK` if passed, `Unknown` if skipped, `Missing` if failed |
+| `cosign_cli_details` | Set from Step 6 INFRA-006 — version string if passed; `Cannot verify remotely — ensure cosign is installed on CI runner nodes` if skipped; `cosign CLI not found — install via package manager, container image, or binary download` if failed |
 | `oidc_status` | Set from Step 6 OIDC rules — `OK` if OIDC-001 and OIDC-002 pass |
 | `oidc_details` | Set from Step 6 — include OIDC issuer and client ID if detected |
 | `variable_name` | Set from Step 4 — add one row per required CI/CD variable |
@@ -383,9 +385,11 @@ sign-image:
     REKOR_URL: ${TAS_REKOR_URL}
     OIDC_ISSUER: ${TAS_OIDC_ISSUER}
   script:
+    - export ROOT_CHECKSUM=$(curl -s "${TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
     - cosign initialize
-        --mirror=${TUF_URL}
-        --root=${TUF_URL}/root.json
+        --mirror="${TUF_URL}"
+        --root="${TUF_URL}/1.root.json"
+        --root-checksum="${ROOT_CHECKSUM}"
     - cosign sign
         --fulcio-url=${FULCIO_URL}
         --rekor-url=${REKOR_URL}

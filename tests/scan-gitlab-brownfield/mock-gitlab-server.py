@@ -46,9 +46,11 @@ sign-image:
     SIGSTORE_ID_TOKEN:
       aud: trusted-artifact-signer
   script:
+    - export ROOT_CHECKSUM=$(curl -s "${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
     - cosign initialize
-        --mirror=${TAS_TUF_URL}
-        --root=${TAS_TUF_URL}/root.json
+        --mirror="${TAS_TUF_URL}"
+        --root="${TAS_TUF_URL}/1.root.json"
+        --root-checksum="${ROOT_CHECKSUM}"
     - cosign sign
         --fulcio-url=${TAS_FULCIO_URL}
         --rekor-url=${TAS_REKOR_URL}
@@ -90,7 +92,7 @@ VARIABLES = [
     {"key": "TAS_TUF_URL", "value": f"{MOCK_TAS_URL}/tuf",
      "variable_type": "env_var", "protected": False, "masked": False,
      "environment_scope": "*"},
-    {"key": "TAS_TSA_URL", "value": f"{MOCK_TAS_URL}/tsa",
+    {"key": "TAS_TSA_URL", "value": f"{MOCK_TAS_URL}/api/v1/timestamp",
      "variable_type": "env_var", "protected": False, "masked": False,
      "environment_scope": "*"},
     {"key": "TAS_OIDC_ISSUER", "value": f"{MOCK_TAS_URL}/oidc",

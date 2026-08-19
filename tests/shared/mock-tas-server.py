@@ -7,8 +7,9 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 ROUTES = {
     "/fulcio/healthz": (200, "ok"),
     "/rekor/api/v1/log": (200, json.dumps({"treeSize": 0, "rootHash": "", "signedTreeHead": ""})),
-    "/tsa/api/v1/timestamp/certchain": (200, json.dumps(["mock-tsa-root-cert"])),
+    "/api/v1/timestamp/certchain": (200, json.dumps(["mock-tsa-root-cert"])),
     "/tuf/root.json": (200, json.dumps({"signed": {"_type": "root", "version": 1}})),
+    "/tuf/1.root.json": (200, json.dumps({"signed": {"_type": "root", "version": 1}})),
     "/oidc/.well-known/openid-configuration": (200, json.dumps({
         "issuer": "http://localhost:8090/oidc",
         "authorization_endpoint": "http://localhost:8090/oidc/auth",

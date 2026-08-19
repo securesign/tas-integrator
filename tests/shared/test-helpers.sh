@@ -12,7 +12,7 @@ skip() { echo "  SKIP: $1"; SKIP=$((SKIP + 1)); }
 
 check_tas_endpoints() {
   local base_url="$1"
-  local entries="Fulcio:/fulcio/healthz Rekor:/rekor/api/v1/log TSA:/tsa/api/v1/timestamp/certchain TUF:/tuf/root.json OIDC:/oidc/.well-known/openid-configuration"
+  local entries="Fulcio:/fulcio/healthz Rekor:/rekor/api/v1/log TSA:/api/v1/timestamp/certchain TUF:/tuf/root.json OIDC:/oidc/.well-known/openid-configuration"
   for entry in $entries; do
     local name="${entry%%:*}"
     local path="${entry#*:}"
