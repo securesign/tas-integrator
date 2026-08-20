@@ -229,6 +229,8 @@ TUF_URL=$(kubectl get tuf -n {{namespace}} \
   -o jsonpath='{.items[0].status.url}')
 TSA_URL=$(kubectl get timestampauthority -n {{namespace}} \
   -o jsonpath='{.items[0].status.url}')
+# Append /api/v1/timestamp if not already present (for older operator versions)
+[[ -n "$TSA_URL" && "$TSA_URL" != */api/v1/timestamp ]] && TSA_URL="${TSA_URL}/api/v1/timestamp"
 ```
 
 #### 5d — From RHEL Configuration

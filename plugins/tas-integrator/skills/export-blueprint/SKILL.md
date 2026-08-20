@@ -83,7 +83,7 @@ Use detected TAS endpoint URLs to populate the validation command summary.
 |-------|------|-------------|
 | `rekor_url` | string | Set Rekor server base URL |
 | `fulcio_url` | string | Set Fulcio server base URL |
-| `tsa_url` | string | Set Timestamp Authority base URL |
+| `tsa_url` | string | Set Timestamp Authority endpoint URL (includes /api/v1/timestamp path) |
 | `tuf_url` | string | Set TUF mirror base URL |
 | `oidc_issuer` | string | Set OIDC token issuer URL |
 | `oidc_client_id` | string | Set OIDC client ID |
@@ -158,7 +158,7 @@ user can fill them in manually.
 |-----------|---------|----------|
 | Fulcio | `curl -s -o /dev/null -w "%{http_code}" {{fulcio_url}}/healthz` | `200` |
 | Rekor | `curl -s -o /dev/null -w "%{http_code}" {{rekor_url}}/api/v1/log` | `200` |
-| TSA | `curl -s -o /dev/null -w "%{http_code}" {{tsa_url}}/api/v1/timestamp/certchain` | `200` |
+| TSA | `curl -s -o /dev/null -w "%{http_code}" {{tsa_url}}/certchain` | `200` |
 | TUF | `curl -s -o /dev/null -w "%{http_code}" {{tuf_url}}/root.json` | `200` |
 ```
 

@@ -120,13 +120,23 @@ Health check: `GET {{rekor_url}}/api/v1/log`
 
 ### Timestamp Authority (TSA)
 
-The operator always sets `status.tsa.url` with the `/api/v1/timestamp` path
-suffix included. All `{{tsa_url}}` references below assume this full URL.
+**Operator behavior varies by version:**
+- **Recent versions:** `TimestampAuthority.status.url` includes the `/api/v1/timestamp` path suffix
+- **Older versions:** `TimestampAuthority.status.url` contains only the base URL
+
+All `{{tsa_url}}` references below assume the full endpoint URL (with `/api/v1/timestamp`).
 
 | Format | Example |
 |--------|---------|
 | Operator status (recommended) | `https://tsa-server-<namespace>.apps.<cluster-domain>/api/v1/timestamp` |
 | Port-forward (dev) | `http://localhost:3002/api/v1/timestamp` |
+
+**Backward-compatible detection:**
+```bash
+TSA_URL=$(kubectl get timestampauthority -n {{namespace}} -o jsonpath='{.items[0].status.url}')
+# Append /api/v1/timestamp if not already present (for older operator versions)
+[[ -n "$TSA_URL" && "$TSA_URL" != */api/v1/timestamp ]] && TSA_URL="${TSA_URL}/api/v1/timestamp"
+```
 
 Timestamp endpoint: `POST {{tsa_url}}`
 
