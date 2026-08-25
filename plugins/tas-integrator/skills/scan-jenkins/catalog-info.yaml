@@ -1,0 +1,47 @@
+apiVersion: backstage.io/v1alpha1
+kind: AiResource
+metadata:
+  name: rhtas-scan-jenkins
+  title: RHTAS Jenkins Scanner Skill
+  namespace: securesign
+  description: >
+    Scans Jenkins environments for Red Hat Trusted Artifact Signer integration
+    readiness. Connects read-only to Jenkins APIs to inspect plugins, pipelines,
+    credentials, and network connectivity. Evaluates 25 gap detection rules and
+    generates implementation blueprints with Jenkinsfile snippets for signing,
+    verification, and attestation stages.
+  tags:
+    - jenkins
+    - ci-cd
+    - container-signing
+    - rhtas
+    - devops
+    - security
+  labels:
+    distribution: external
+  annotations:
+    backstage.io/source-location: url:https://github.com/securesign/tas-integrator/blob/main/plugins/tas-integrator/skills/scan-jenkins/SKILL.md
+    github.com/project-slug: securesign/tas-integrator
+  links:
+    - url: https://github.com/securesign/tas-integrator
+      title: Source Repository
+      icon: github
+    - url: https://docs.redhat.com/en/documentation/red_hat_trusted_artifact_signer
+      title: RHTAS Documentation
+      icon: docs
+
+spec:
+  type: skill
+  lifecycle: alpha
+  owner: group:redhat/securesign-team
+  system: securesign/trusted-artifact-signer
+  disciplines:
+    - devops
+    - security
+  categories:
+    - ci-cd
+    - security
+    - automation
+  agents:
+    - claude-code
+  dependsOn: []
