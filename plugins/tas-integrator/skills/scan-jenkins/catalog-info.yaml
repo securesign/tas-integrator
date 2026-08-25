@@ -21,7 +21,6 @@ metadata:
     distribution: external
   annotations:
     backstage.io/source-location: url:https://github.com/securesign/tas-integrator/blob/main/plugins/tas-integrator/skills/scan-jenkins/SKILL.md
-    github.com/project-slug: securesign/tas-integrator
   links:
     - url: https://github.com/securesign/tas-integrator
       title: Source Repository
@@ -44,4 +43,3 @@ spec:
     - automation
   agents:
     - claude-code
-  dependsOn: []
