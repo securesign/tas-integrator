@@ -24,7 +24,7 @@ MOCK_TAS_URL="${MOCK_TAS_URL:-http://localhost:8090}"
 
 TAS_FULCIO_URL="${TAS_FULCIO_URL:-${MOCK_TAS_URL}/fulcio}"
 TAS_REKOR_URL="${TAS_REKOR_URL:-${MOCK_TAS_URL}/rekor}"
-TAS_TSA_URL="${TAS_TSA_URL:-${MOCK_TAS_URL}/tsa}"
+TAS_TSA_URL="${TAS_TSA_URL:-${MOCK_TAS_URL}/api/v1/timestamp}"
 TAS_TUF_URL="${TAS_TUF_URL:-${MOCK_TAS_URL}/tuf}"
 TAS_OIDC_ISSUER="${TAS_OIDC_ISSUER:-${MOCK_TAS_URL}/oidc}"
 TAS_OIDC_CLIENT_ID="${TAS_OIDC_CLIENT_ID:-trusted-artifact-signer}"
@@ -314,9 +314,11 @@ pipeline {
             steps {
                 echo 'Initializing TUF root of trust...'
                 sh """
+                    ROOT_CHECKSUM=\$(curl -s "\${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
                     cosign initialize \\
-                        --mirror=\${TAS_TUF_URL} \\
-                        --root=\${TAS_TUF_URL}/root.json
+                        --mirror="\${TAS_TUF_URL}" \\
+                        --root="\${TAS_TUF_URL}/1.root.json" \\
+                        --root-checksum="\$ROOT_CHECKSUM"
                 """
             }
         }

@@ -203,6 +203,8 @@ TUF_URL=$(kubectl get tuf -n {{namespace}} \
   -o jsonpath='{.items[0].status.url}')
 TSA_URL=$(kubectl get timestampauthority -n {{namespace}} \
   -o jsonpath='{.items[0].status.url}')
+# Append /api/v1/timestamp if not already present (for older operator versions)
+[[ -n "$TSA_URL" && "$TSA_URL" != */api/v1/timestamp ]] && TSA_URL="${TSA_URL}/api/v1/timestamp"
 ```
 
 #### 5c — From RHEL Configuration
@@ -309,6 +311,8 @@ Fill placeholders for [shared/templates/jenkins-blueprint.md](../../shared/templ
 | `network_details` | Set from Step 5d — summarize reachable/unreachable endpoints |
 | `tas_server_status` | Set from Step 5 — `OK` if at least Fulcio + Rekor detected |
 | `tas_server_details` | Set from Step 5 — include deployment method and endpoints |
+| `cosign_cli_status` | Set from Step 6 INFRA-006 — `OK` if passed, `Unknown` if skipped, `Missing` if failed |
+| `cosign_cli_details` | Set from Step 6 INFRA-006 — version string if passed; `Cannot verify remotely — ensure cosign is installed on Jenkins agent nodes` if skipped; `cosign CLI not found — install via package manager, container image, or binary download` if failed |
 | `oidc_status` | Set from Step 6 OIDC rules — `OK` if OIDC-001 and OIDC-002 pass |
 | `oidc_details` | Set from Step 6 — include OIDC issuer and client ID if detected |
 | `plugin_name` | Set from Step 2 — add one row per required plugin |
@@ -361,9 +365,11 @@ stage('Sign Image') {
             ).trim()
 
             sh """
+                ROOT_CHECKSUM=\$(curl -s "\${TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
                 cosign initialize \
-                  --mirror=\${TUF_URL} \
-                  --root=\${TUF_URL}/root.json
+                  --mirror="\${TUF_URL}" \
+                  --root="\${TUF_URL}/1.root.json" \
+                  --root-checksum="\$ROOT_CHECKSUM"
 
                 cosign sign \
                   --fulcio-url=\${FULCIO_URL} \

@@ -120,13 +120,23 @@ Health check: `GET {{rekor_url}}/api/v1/log`
 
 ### Timestamp Authority (TSA)
 
-The operator status URL (`status.tsa.url`) includes the `/api/v1/timestamp`
-path suffix. All `{{tsa_url}}` references assume this full URL.
+**Operator behavior varies by version:**
+- **Recent versions:** `TimestampAuthority.status.url` includes the `/api/v1/timestamp` path suffix
+- **Older versions:** `TimestampAuthority.status.url` contains only the base URL
+
+All `{{tsa_url}}` references below assume the full endpoint URL (with `/api/v1/timestamp`).
 
 | Format | Example |
 |--------|---------|
-| Operator status / Ingress | `https://tsa-server-<namespace>.apps.<cluster-domain>/api/v1/timestamp` |
+| Operator status (recommended) | `https://tsa-server-<namespace>.apps.<cluster-domain>/api/v1/timestamp` |
 | Port-forward (dev) | `http://localhost:3002/api/v1/timestamp` |
+
+**Backward-compatible detection:**
+```bash
+TSA_URL=$(kubectl get timestampauthority -n {{namespace}} -o jsonpath='{.items[0].status.url}')
+# Append /api/v1/timestamp if not already present (for older operator versions)
+[[ -n "$TSA_URL" && "$TSA_URL" != */api/v1/timestamp ]] && TSA_URL="${TSA_URL}/api/v1/timestamp"
+```
 
 Timestamp endpoint: `POST {{tsa_url}}`
 
@@ -147,21 +157,24 @@ Root metadata: `GET {{tuf_url}}/root.json`
 ## Cosign TUF Initialization
 
 Before signing or verifying against a private TAS instance, cosign must be
-initialized with the TAS TUF root:
+initialized with the TAS TUF root. The `--root-checksum` flag prevents MITM
+attacks during initialization by verifying root.json integrity.
 
 ```bash
-cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/root.json
-```
+# Compute checksum from the versioned root
+ROOT_CHECKSUM=$(curl -s "{{tuf_url}}/1.root.json" | sha256sum | awk '{print $1}')
 
-An optional `--root-checksum` flag verifies the root.json integrity:
-
-```bash
-cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/root.json \
-  --root-checksum={{expected_sha256}}
+# Initialize with checksum verification
+cosign initialize \
+  --mirror="{{tuf_url}}" \
+  --root="{{tuf_url}}/1.root.json" \
+  --root-checksum="$ROOT_CHECKSUM"
 ```
 
 This configures cosign to trust the TAS instance's Fulcio CA, Rekor public
-key, and CT log key.
+key, and CT log key. Using `1.root.json` (version-specific) ensures a stable
+checksum; `root.json` redirects to the latest version and may change between
+rotations.
 
 ---
 
