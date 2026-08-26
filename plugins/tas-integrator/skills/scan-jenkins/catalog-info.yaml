@@ -32,8 +32,7 @@ metadata:
 spec:
   type: skill
   lifecycle: alpha
-  owner: group:redhat/securesign-team
-  system: securesign/trusted-artifact-signer
+  owner: group:redhat/rhtas-leads
   disciplines:
     - devops
     - security
