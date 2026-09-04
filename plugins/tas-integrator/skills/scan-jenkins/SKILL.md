@@ -225,10 +225,31 @@ Run a health check for every discovered endpoint:
 
 Store pass/fail for each endpoint check.
 
-#### 5e — OIDC Client Type Detection
+#### 5e — OIDC Provider Type and Client Detection
 
-If `oidc_issuer` was discovered and matches a Keycloak pattern (contains `/realms/`),
-probe the token endpoint to detect whether the OIDC client is public or confidential:
+Classify the detected OIDC provider and, for Keycloak-based providers, probe for
+client type.
+
+**Provider Classification:**
+
+Examine the `oidc_issuer` URL pattern to determine the provider type:
+
+| Pattern | Provider Type | Notes |
+|---------|--------------|-------|
+| Contains `/realms/` or `/auth/realms/` | `keycloak` | Keycloak, RHBK, or Red Hat SSO |
+| Contains `token.actions.githubusercontent.com` | `github-actions` | GitHub Actions native OIDC |
+| Contains `gitlab.com` or ends with `.gitlab.io` | `gitlab-native` | GitLab native OIDC |
+| Contains `googleapis.com` or `accounts.google.com` | `google` | Google OAuth |
+| Contains `login.microsoftonline.com` or `sts.windows.net` | `microsoft` | Microsoft Entra ID |
+| Contains `.amazonaws.com` | `aws-sts` | Amazon Security Token Service |
+| Other | `generic` | Generic OIDC provider |
+
+Record `oidc_provider_type` for use in Step 8b blueprint generation.
+
+**Keycloak Client Type Detection:**
+
+If `oidc_provider_type` is `keycloak`, probe the token endpoint to detect whether
+the client is public or confidential:
 
 ```bash
 PROBE_RESPONSE=$(curl -s -X POST \
@@ -247,11 +268,13 @@ Classify the client type based on the error response:
 | HTTP 200 (token returned) | `confidential` |
 | Unreachable or ambiguous | `unknown` (default to `public`) |
 
-Record `oidc_client_type` as `public`, `confidential`, or `unknown`. This value is
-used in Step 8b to generate the appropriate token acquisition snippet.
+Record `oidc_client_type` as `public`, `confidential`, or `unknown`.
 
-If the OIDC issuer is not Keycloak, skip this step and set `oidc_client_type` to
-`unknown`.
+**Non-Keycloak Providers:**
+
+For non-Keycloak providers, skip client type detection and set `oidc_client_type`
+to `not-applicable`. The blueprint will include provider-specific guidance instead
+of Keycloak-specific snippets.
 
 ### Step 6 — Evaluate Gap Detection Rules
 
@@ -377,17 +400,31 @@ Generate Groovy pipeline snippets using patterns from
 [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) and
 [shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) (Jenkins section).
 
-**Token Acquisition Conditional Logic:**
+**Provider-Specific Token Acquisition:**
 
-Based on the `oidc_client_type` detected in Step 5e, generate the appropriate token
-acquisition snippet:
+Based on the `oidc_provider_type` detected in Step 5e, generate appropriate guidance:
 
-- **If `oidc_client_type` is `confidential`:** Use `client_credentials` grant with
-  `OIDC_CLIENT_SECRET` credential
-- **If `oidc_client_type` is `public` or `unknown`:** Use `password` grant with
-  `OIDC_USER` and `OIDC_PASSWORD` credentials
+**For `keycloak` providers:**
 
-Generate the signing stage with conditional token acquisition:
+Generate Keycloak-specific snippets based on `oidc_client_type`:
+- **If `confidential`:** Use `client_credentials` grant with `OIDC_CLIENT_SECRET`
+- **If `public` or `unknown`:** Use `password` grant with `OIDC_USER`/`OIDC_PASSWORD`
+
+**For non-Keycloak providers:**
+
+Generate a guidance section instead of executable snippets. Include:
+- Provider name and detected issuer URL
+- Note that Jenkins lacks native OIDC for this provider
+- Link to RHTAS Deployment Guide section for the specific provider
+- Recommendation to use Keycloak/RHBK for Jenkins CI/CD automation
+
+See "Non-Keycloak Provider Guidance" section below for templates.
+
+---
+
+**Keycloak Signing Stage Snippets:**
+
+Generate the signing stage with conditional token acquisition for Keycloak providers:
 
 **For confidential clients:**
 
@@ -579,6 +616,140 @@ stage('Attest Image') {
     }
 }
 ```
+
+---
+
+**Non-Keycloak Provider Guidance:**
+
+For non-Keycloak providers, generate a guidance section in the blueprint instead of
+Jenkinsfile snippets. Use the templates below based on `oidc_provider_type`:
+
+**GitHub Actions:**
+```markdown
+## ⚠️ GitHub Actions OIDC Detected
+
+Your RHTAS deployment is configured with GitHub Actions as the OIDC provider:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Limitation:** Jenkins does not provide native integration with GitHub
+Actions OIDC. GitHub Actions OIDC tokens are only available within GitHub Actions
+workflows.
+
+**Recommended Approach:**
+1. **Option A (Recommended):** Configure Keycloak or Red Hat SSO as an additional
+   OIDC issuer in Fulcio for Jenkins-based signing. See the RHTAS Deployment Guide
+   section on "Configuring multiple OIDC issuers."
+
+2. **Option B:** Perform signing within GitHub Actions workflows instead of Jenkins.
+   Refer to the RHTAS Deployment Guide section on "Signing with GitHub Actions."
+```
+
+**Google OAuth:**
+```markdown
+## ⚠️ Google OAuth OIDC Detected
+
+Your RHTAS deployment is configured with Google OAuth as the OIDC provider:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Limitation:** Google OAuth uses browser-based authentication flows and is
+not suitable for Jenkins CI/CD automation (non-interactive pipelines).
+
+**Recommended Approach:**
+Configure Keycloak or Red Hat SSO as the OIDC issuer for CI/CD automation. Keycloak
+can optionally federate to Google for interactive user authentication while providing
+service account credentials for Jenkins pipelines.
+
+Refer to the RHTAS Deployment Guide sections:
+- "Configuring Keycloak OIDC Issuer"
+- "Keycloak Identity Provider Federation" (optional Google integration)
+```
+
+**Microsoft Entra ID:**
+```markdown
+## ⚠️ Microsoft Entra ID OIDC Detected
+
+Your RHTAS deployment is configured with Microsoft Entra ID as the OIDC provider:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Limitation:** Microsoft Entra ID uses browser-based authentication flows
+and is not suitable for Jenkins CI/CD automation (non-interactive pipelines).
+
+**Recommended Approach:**
+Configure Keycloak or Red Hat SSO as the OIDC issuer for CI/CD automation. Keycloak
+can optionally federate to Microsoft Entra ID for interactive user authentication
+while providing service account credentials for Jenkins pipelines.
+
+Refer to the RHTAS Deployment Guide sections:
+- "Configuring Keycloak OIDC Issuer"
+- "Configuring Microsoft Entra ID" (for user federation)
+```
+
+**AWS STS:**
+```markdown
+## ⚠️ Amazon STS OIDC Detected
+
+Your RHTAS deployment is configured with Amazon Security Token Service:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Limitation:** AWS STS uses Kubernetes service account tokens and requires
+pods running in an EKS cluster with IAM roles for service accounts (IRSA) configured.
+
+**Recommended Approach:**
+1. **If Jenkins runs on EKS:** Configure Jenkins pod service accounts and refer to
+   the RHTAS Deployment Guide section on "Signing with Amazon STS."
+
+2. **If Jenkins runs elsewhere:** Configure Keycloak or Red Hat SSO as an additional
+   OIDC issuer for Jenkins-based signing.
+```
+
+**GitLab (Native OIDC):**
+```markdown
+## ⚠️ GitLab Native OIDC Detected
+
+Your RHTAS deployment is configured with GitLab native OIDC:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Limitation:** Jenkins does not provide native integration with GitLab OIDC.
+GitLab OIDC tokens (`id_tokens` keyword) are only available within GitLab CI pipelines.
+
+**Recommended Approach:**
+1. **Option A (Recommended):** Configure Keycloak or Red Hat SSO as an additional
+   OIDC issuer in Fulcio for Jenkins-based signing.
+
+2. **Option B:** Perform signing within GitLab CI pipelines instead of Jenkins.
+   Refer to the RHTAS Deployment Guide section on "Signing with GitLab CI."
+```
+
+**Generic OIDC Provider:**
+```markdown
+## ⚠️ Generic OIDC Provider Detected
+
+Your RHTAS deployment is configured with a custom OIDC provider:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Integration:** Token acquisition depends on your OIDC provider's
+supported grant types. Jenkins requires programmatic token access (non-interactive).
+
+**Recommended Approaches:**
+1. Check if your OIDC provider supports `client_credentials` grant (service accounts)
+   or `password` grant (resource owner credentials).
+
+2. Consult your OIDC provider's documentation for CI/CD integration patterns.
+
+3. For enterprise Jenkins deployments, consider using Keycloak or Red Hat SSO, which
+   provide well-tested CI/CD integration patterns and can federate to your existing
+   identity provider.
+
+Refer to the RHTAS Deployment Guide section on "Configuring custom OIDC issuers."
+```
+
+---
 
 Substitute detected endpoint URLs for environment variable references when
 known. Keep variable references when endpoints are not detected so the user

@@ -126,15 +126,15 @@ guidance.
 | Pass Condition | Discovery document returned with valid JSON |
 | Remediation | Check network connectivity, DNS resolution, and TLS trust for the OIDC provider |
 
-### OIDC-005: Keycloak Client Type Detected
+### OIDC-005: OIDC Provider Type and Configuration Detected
 
 | Field | Value |
 |-------|-------|
 | Severity | Medium |
-| Description | The Keycloak client type (public or confidential) determines the OIDC token acquisition flow for CI/CD automation |
-| Detection | POST to `{{oidc_issuer}}/protocol/openid-connect/token` with `grant_type=client_credentials` and no secret; classify error response pattern |
-| Pass Condition | Client type successfully determined (public or confidential) |
-| Remediation | If detection fails, verify the OIDC issuer URL is correct and the token endpoint is reachable. For CI/CD automation with public clients, consider reconfiguring to confidential client with service account enabled |
+| Description | The OIDC provider type determines token acquisition patterns and CI/CD integration approach. For Keycloak providers, client type (public vs confidential) affects the grant type used |
+| Detection | Classify provider from issuer URL pattern (Keycloak, GitHub Actions, Google, Microsoft, AWS STS, GitLab, generic). For Keycloak: probe token endpoint with `grant_type=client_credentials` to detect client type |
+| Pass Condition | Provider type successfully identified. For Keycloak: client type determined as public or confidential |
+| Remediation | If Keycloak detection fails, verify the OIDC issuer URL and token endpoint. For non-Keycloak providers in Jenkins, consider adding Keycloak/RHBK as a secondary issuer for CI/CD automation. Refer to RHTAS Deployment Guide for provider-specific configuration |
 
 ---
 
