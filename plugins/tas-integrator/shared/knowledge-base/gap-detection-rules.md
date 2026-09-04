@@ -58,8 +58,8 @@ guidance.
 |-------|-------|
 | Severity | High |
 | Description | TUF root metadata must be available for cosign initialization |
-| Detection | `GET {{tuf_url}}/root.json` returns HTTP 200 |
-| Pass Condition | Root metadata downloadable |
+| Detection | `GET {{tuf_url}}/1.root.json` returns HTTP 200 |
+| Pass Condition | Versioned root metadata downloadable |
 | Remediation | Verify TUF pod is running, ensure TUF root has been initialized |
 
 ### INFRA-005: TSA Endpoint Reachable
@@ -168,7 +168,7 @@ guidance.
 | Description | Cosign must be initialized with the TAS TUF root before signing |
 | Detection | Search for `cosign initialize` command with `--mirror` and `--root` flags |
 | Pass Condition | TUF initialization step present before signing step |
-| Remediation | Add `cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/root.json` before signing |
+| Remediation | Add TUF initialization with checksum verification before signing: `ROOT_CHECKSUM=$(curl -s "{{tuf_url}}/1.root.json" \| sha256sum \| awk '{print $1}'); cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/1.root.json --root-checksum=$ROOT_CHECKSUM` |
 
 ### SIGN-005: Confirmation Prompt Suppressed
 
