@@ -126,6 +126,16 @@ guidance.
 | Pass Condition | Discovery document returned with valid JSON |
 | Remediation | Check network connectivity, DNS resolution, and TLS trust for the OIDC provider |
 
+### OIDC-005: Keycloak Client Type Detected
+
+| Field | Value |
+|-------|-------|
+| Severity | Medium |
+| Description | The Keycloak client type (public or confidential) determines the OIDC token acquisition flow for CI/CD automation |
+| Detection | POST to `{{oidc_issuer}}/protocol/openid-connect/token` with `grant_type=client_credentials` and no secret; classify error response pattern |
+| Pass Condition | Client type successfully determined (public or confidential) |
+| Remediation | If detection fails, verify the OIDC issuer URL is correct and the token endpoint is reachable. For CI/CD automation with public clients, consider reconfiguring to confidential client with service account enabled |
+
 ---
 
 ## Signing Rules
@@ -168,7 +178,7 @@ guidance.
 | Description | Cosign must be initialized with the TAS TUF root before signing |
 | Detection | Search for `cosign initialize` command with `--mirror` and `--root` flags |
 | Pass Condition | TUF initialization step present before signing step |
-| Remediation | Add TUF initialization with checksum verification before signing: `ROOT_CHECKSUM=$(curl -s "{{tuf_url}}/1.root.json" \| sha256sum \| awk '{print $1}'); cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/1.root.json --root-checksum=$ROOT_CHECKSUM` |
+| Remediation | Add `ROOT_CHECKSUM=$(curl -s "{{tuf_url}}/1.root.json" \| sha256sum \| awk '{print $1}'); cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/1.root.json --root-checksum=$ROOT_CHECKSUM` before signing |
 
 ### SIGN-005: Confirmation Prompt Suppressed
 

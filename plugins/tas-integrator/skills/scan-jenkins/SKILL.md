@@ -225,9 +225,37 @@ Run a health check for every discovered endpoint:
 
 Store pass/fail for each endpoint check.
 
+#### 5e — OIDC Client Type Detection
+
+If `oidc_issuer` was discovered and matches a Keycloak pattern (contains `/realms/`),
+probe the token endpoint to detect whether the OIDC client is public or confidential:
+
+```bash
+PROBE_RESPONSE=$(curl -s -X POST \
+  "{{oidc_issuer}}/protocol/openid-connect/token" \
+  -d "grant_type=client_credentials" \
+  -d "client_id={{oidc_client_id}}" \
+  2>&1)
+```
+
+Classify the client type based on the error response:
+
+| Response Pattern | Client Type |
+|------------------|-------------|
+| Error contains `"public client"` or `"service account"` | `public` |
+| Error contains `"client secret"` or `"invalid credentials"` or `"unauthorized_client"` | `confidential` |
+| HTTP 200 (token returned) | `confidential` |
+| Unreachable or ambiguous | `unknown` (default to `public`) |
+
+Record `oidc_client_type` as `public`, `confidential`, or `unknown`. This value is
+used in Step 8b to generate the appropriate token acquisition snippet.
+
+If the OIDC issuer is not Keycloak, skip this step and set `oidc_client_type` to
+`unknown`.
+
 ### Step 6 — Evaluate Gap Detection Rules
 
-Run all 24 rules from [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md)
+Run all 25 rules from [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md)
 against the data collected in Steps 1–5. Record for each rule:
 
 | Field | Value |
@@ -243,11 +271,16 @@ against the data collected in Steps 1–5. Record for each rule:
 | Rule Category | Evaluate Using |
 |---------------|----------------|
 | `INFRA` | Use Step 5 endpoint discovery and health checks |
-| `OIDC` | Use Step 3 pipeline patterns + Step 5 environment variables |
+| `OIDC` | Use Step 3 pipeline patterns + Step 5 environment variables + Step 5e client type detection |
 | `SIGN` | Use Step 3 pipeline patterns |
 | `VERIFY` | Use Step 3 pipeline patterns |
 | `POLICY` | Use Step 5b Kubernetes CRD check (if available) |
 | `SUPPLY` | Use Step 3 pipeline patterns (SBOM tools, attestation commands) |
+
+**OIDC-005 Evaluation:** Evaluate OIDC-005 using the `oidc_client_type` result from Step 5e:
+- `pass` if client type is `public` or `confidential` (detected successfully)
+- `fail` if client type is `unknown` (detection failed or was skipped)
+- Include the detected client type in the `details` field
 
 Mark rules as `skip` when the required data source is unavailable (e.g., no
 `kubectl` access for POLICY rules).
@@ -344,46 +377,109 @@ Generate Groovy pipeline snippets using patterns from
 [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) and
 [shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) (Jenkins section).
 
-Generate the signing stage — run `cosign initialize` then `cosign sign`:
+**Token Acquisition Conditional Logic:**
+
+Based on the `oidc_client_type` detected in Step 5e, generate the appropriate token
+acquisition snippet:
+
+- **If `oidc_client_type` is `confidential`:** Use `client_credentials` grant with
+  `OIDC_CLIENT_SECRET` credential
+- **If `oidc_client_type` is `public` or `unknown`:** Use `password` grant with
+  `OIDC_USER` and `OIDC_PASSWORD` credentials
+
+Generate the signing stage with conditional token acquisition:
+
+**For confidential clients:**
 
 ```groovy
 stage('Sign Image') {
     steps {
-        script {
-            // Confidential client: use grant_type=client_credentials with OIDC_CLIENT_SECRET
-            // Public client: use grant_type=password with OIDC_USER/OIDC_PASSWORD
-            def IDENTITY_TOKEN = sh(
-                script: """
-                    curl -s -X POST \
-                      "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
-                      -d "grant_type=client_credentials" \
-                      -d "client_id=\${OIDC_CLIENT_ID}" \
-                      -d "client_secret=\${OIDC_CLIENT_SECRET}" \
-                      | jq -r '.access_token'
-                """,
-                returnStdout: true
-            ).trim()
+        withCredentials([string(credentialsId: 'oidc-client-secret', variable: 'OIDC_CLIENT_SECRET')]) {
+            script {
+                def IDENTITY_TOKEN = sh(
+                    script: """
+                        curl -s -X POST \
+                          "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                          -d "grant_type=client_credentials" \
+                          -d "client_id=\${OIDC_CLIENT_ID}" \
+                          -d "client_secret=\${OIDC_CLIENT_SECRET}" \
+                          | jq -r '.access_token'
+                    """,
+                    returnStdout: true
+                ).trim()
 
-            sh """
-                ROOT_CHECKSUM=\$(curl -s "\${TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
-                cosign initialize \
-                  --mirror="\${TUF_URL}" \
-                  --root="\${TUF_URL}/1.root.json" \
-                  --root-checksum="\$ROOT_CHECKSUM"
+                sh """
+                    ROOT_CHECKSUM=\$(curl -s "\${TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
+                    cosign initialize \
+                      --mirror="\${TUF_URL}" \
+                      --root="\${TUF_URL}/1.root.json" \
+                      --root-checksum="\$ROOT_CHECKSUM"
 
-                cosign sign \
-                  --fulcio-url=\${FULCIO_URL} \
-                  --rekor-url=\${REKOR_URL} \
-                  --oidc-issuer=\${OIDC_ISSUER} \
-                  --oidc-client-id=\${OIDC_CLIENT_ID} \
-                  --identity-token=${IDENTITY_TOKEN} \
-                  --yes \
-                  \${IMAGE_REFERENCE}
-            """
+                    cosign sign \
+                      --fulcio-url=\${FULCIO_URL} \
+                      --rekor-url=\${REKOR_URL} \
+                      --oidc-issuer=\${OIDC_ISSUER} \
+                      --oidc-client-id=\${OIDC_CLIENT_ID} \
+                      --identity-token=${IDENTITY_TOKEN} \
+                      --yes \
+                      \${IMAGE_REFERENCE}
+                """
+            }
         }
     }
 }
 ```
+
+**For public clients:**
+
+```groovy
+stage('Sign Image') {
+    steps {
+        withCredentials([
+            usernamePassword(credentialsId: 'oidc-user-credentials', 
+                           usernameVariable: 'OIDC_USER', 
+                           passwordVariable: 'OIDC_PASSWORD')
+        ]) {
+            script {
+                def IDENTITY_TOKEN = sh(
+                    script: """
+                        curl -s -X POST \
+                          "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                          -d "grant_type=password" \
+                          -d "client_id=\${OIDC_CLIENT_ID}" \
+                          -d "username=\${OIDC_USER}" \
+                          -d "password=\${OIDC_PASSWORD}" \
+                          -d "scope=openid email" \
+                          | jq -r '.access_token'
+                    """,
+                    returnStdout: true
+                ).trim()
+
+                sh """
+                    ROOT_CHECKSUM=\$(curl -s "\${TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
+                    cosign initialize \
+                      --mirror="\${TUF_URL}" \
+                      --root="\${TUF_URL}/1.root.json" \
+                      --root-checksum="\$ROOT_CHECKSUM"
+
+                    cosign sign \
+                      --fulcio-url=\${FULCIO_URL} \
+                      --rekor-url=\${REKOR_URL} \
+                      --oidc-issuer=\${OIDC_ISSUER} \
+                      --oidc-client-id=\${OIDC_CLIENT_ID} \
+                      --identity-token=${IDENTITY_TOKEN} \
+                      --yes \
+                      \${IMAGE_REFERENCE}
+                """
+            }
+        }
+    }
+}
+```
+
+**Note:** Include both snippet variants in the blueprint with clear conditional
+headers indicating which one applies based on the detected client type. If client
+type is `unknown`, default to the public client snippet with a warning note.
 
 Generate the verification stage — run `cosign verify` with certificate identity:
 
@@ -401,36 +497,84 @@ stage('Verify Image') {
 }
 ```
 
-Generate the attestation stage — run `cosign attest` with SBOM predicates:
+Generate the attestation stage — run `cosign attest` with SBOM predicates.
+Use the same conditional token acquisition pattern as the signing stage:
+
+**For confidential clients:**
 
 ```groovy
 stage('Attest Image') {
     steps {
-        script {
-            def IDENTITY_TOKEN = sh(
-                script: """
-                    curl -s -X POST \
-                      "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
-                      -d "grant_type=client_credentials" \
-                      -d "client_id=\${OIDC_CLIENT_ID}" \
-                      -d "client_secret=\${OIDC_CLIENT_SECRET}" \
-                      | jq -r '.access_token'
-                """,
-                returnStdout: true
-            ).trim()
+        withCredentials([string(credentialsId: 'oidc-client-secret', variable: 'OIDC_CLIENT_SECRET')]) {
+            script {
+                def IDENTITY_TOKEN = sh(
+                    script: """
+                        curl -s -X POST \
+                          "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                          -d "grant_type=client_credentials" \
+                          -d "client_id=\${OIDC_CLIENT_ID}" \
+                          -d "client_secret=\${OIDC_CLIENT_SECRET}" \
+                          | jq -r '.access_token'
+                    """,
+                    returnStdout: true
+                ).trim()
 
-            sh """
-                cosign attest \
-                  --fulcio-url=\${FULCIO_URL} \
-                  --rekor-url=\${REKOR_URL} \
-                  --oidc-issuer=\${OIDC_ISSUER} \
-                  --oidc-client-id=\${OIDC_CLIENT_ID} \
-                  --identity-token=${IDENTITY_TOKEN} \
-                  --predicate=\${SBOM_FILE} \
-                  --type=spdxjson \
-                  --yes \
-                  \${IMAGE_REFERENCE}
-            """
+                sh """
+                    cosign attest \
+                      --fulcio-url=\${FULCIO_URL} \
+                      --rekor-url=\${REKOR_URL} \
+                      --oidc-issuer=\${OIDC_ISSUER} \
+                      --oidc-client-id=\${OIDC_CLIENT_ID} \
+                      --identity-token=${IDENTITY_TOKEN} \
+                      --predicate=\${SBOM_FILE} \
+                      --type=spdxjson \
+                      --yes \
+                      \${IMAGE_REFERENCE}
+                """
+            }
+        }
+    }
+}
+```
+
+**For public clients:**
+
+```groovy
+stage('Attest Image') {
+    steps {
+        withCredentials([
+            usernamePassword(credentialsId: 'oidc-user-credentials', 
+                           usernameVariable: 'OIDC_USER', 
+                           passwordVariable: 'OIDC_PASSWORD')
+        ]) {
+            script {
+                def IDENTITY_TOKEN = sh(
+                    script: """
+                        curl -s -X POST \
+                          "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                          -d "grant_type=password" \
+                          -d "client_id=\${OIDC_CLIENT_ID}" \
+                          -d "username=\${OIDC_USER}" \
+                          -d "password=\${OIDC_PASSWORD}" \
+                          -d "scope=openid email" \
+                          | jq -r '.access_token'
+                    """,
+                    returnStdout: true
+                ).trim()
+
+                sh """
+                    cosign attest \
+                      --fulcio-url=\${FULCIO_URL} \
+                      --rekor-url=\${REKOR_URL} \
+                      --oidc-issuer=\${OIDC_ISSUER} \
+                      --oidc-client-id=\${OIDC_CLIENT_ID} \
+                      --identity-token=${IDENTITY_TOKEN} \
+                      --predicate=\${SBOM_FILE} \
+                      --type=spdxjson \
+                      --yes \
+                      \${IMAGE_REFERENCE}
+                """
+            }
         }
     }
 }
@@ -544,7 +688,7 @@ Read these knowledge-base files during scanning:
 
 | File | Read to |
 |------|---------|
-| [`shared/knowledge-base/gap-detection-rules.md`](../../shared/knowledge-base/gap-detection-rules.md) | Evaluate all 24 gap checks across 6 categories |
+| [`shared/knowledge-base/gap-detection-rules.md`](../../shared/knowledge-base/gap-detection-rules.md) | Evaluate all 25 gap checks across 6 categories |
 | [`shared/knowledge-base/cosign-signing-patterns.md`](../../shared/knowledge-base/cosign-signing-patterns.md) | Generate Jenkinsfile snippets with correct `cosign` CLI flags |
 | [`shared/knowledge-base/tas-endpoint-config.md`](../../shared/knowledge-base/tas-endpoint-config.md) | Map endpoint URLs, run health checks, and set CI/CD variables |
 | [`shared/knowledge-base/oidc-setup.md`](../../shared/knowledge-base/oidc-setup.md) | Configure OIDC issuer, Keycloak integration, and Jenkins token injection |
