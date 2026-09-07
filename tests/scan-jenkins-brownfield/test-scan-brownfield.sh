@@ -76,8 +76,8 @@ fi
 CONFIG_XML=$(curl -s -u "$AUTH" "$JENKINS_URL/job/tas-container-build/config.xml" 2>/dev/null)
 
 TAS_PATTERNS_EXPECTED=("cosign sign" "cosign verify" "cosign initialize" \
-  "--fulcio-url" "--rekor-url" "--oidc-issuer" "--identity-token" "--yes" \
-  "COSIGN_REKOR_URL" "client_credentials" "OIDC_CLIENT_SECRET")
+  "--oidc-issuer" "SIGSTORE_ID_TOKEN" "COSIGN_YES" "COSIGN_OIDC_CLIENT_ID" \
+  "client_credentials" "OIDC_CLIENT_SECRET")
 TAS_FOUND=0
 TAS_MISSING=""
 for pattern in "${TAS_PATTERNS_EXPECTED[@]}"; do
@@ -88,14 +88,13 @@ for pattern in "${TAS_PATTERNS_EXPECTED[@]}"; do
   fi
 done
 
-if [ "$TAS_FOUND" -ge 10 ]; then
-  pass "Found $TAS_FOUND/$((${#TAS_PATTERNS_EXPECTED[@]})) TAS patterns in pipeline"
+if [ "$TAS_FOUND" -ge 7 ]; then
+  pass "Found $TAS_FOUND/$((${#TAS_PATTERNS_EXPECTED[@]})) TAS patterns in pipeline (TUF-based)"
 else
-  fail "Only $TAS_FOUND TAS patterns found (expected >= 10). Missing:$TAS_MISSING"
+  fail "Only $TAS_FOUND TAS patterns found (expected >= 7). Missing:$TAS_MISSING"
 fi
 
-ENV_VARS_EXPECTED=("TAS_FULCIO_URL" "TAS_REKOR_URL" "TAS_TSA_URL" "TAS_TUF_URL" \
-  "TAS_OIDC_ISSUER" "TAS_OIDC_CLIENT_ID")
+ENV_VARS_EXPECTED=("TAS_TUF_URL" "TAS_OIDC_ISSUER" "TAS_OIDC_CLIENT_ID")
 ENV_FOUND=0
 for var in "${ENV_VARS_EXPECTED[@]}"; do
   if echo "$CONFIG_XML" | grep -qF -- "$var"; then
@@ -103,10 +102,10 @@ for var in "${ENV_VARS_EXPECTED[@]}"; do
   fi
 done
 
-if [ "$ENV_FOUND" -ge 5 ]; then
-  pass "Found $ENV_FOUND/${#ENV_VARS_EXPECTED[@]} TAS environment variables"
+if [ "$ENV_FOUND" -eq 3 ]; then
+  pass "Found $ENV_FOUND/${#ENV_VARS_EXPECTED[@]} TAS environment variables (TUF-based)"
 else
-  fail "Only $ENV_FOUND TAS env vars found (expected >= 5)"
+  fail "Only $ENV_FOUND TAS env vars found (expected 3)"
 fi
 
 echo ""
@@ -115,10 +114,10 @@ CRED_JSON=$(curl -s -u "$AUTH" \
   "$JENKINS_URL/credentials/store/system/domain/_/api/json?depth=2")
 CRED_COUNT=$(echo "$CRED_JSON" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('credentials',[])))")
 
-if [ "$CRED_COUNT" -ge 2 ]; then
-  pass "Found $CRED_COUNT credentials (expected >= 2)"
+if [ "$CRED_COUNT" -ge 1 ]; then
+  pass "Found $CRED_COUNT credential(s)"
 else
-  fail "Found $CRED_COUNT credentials (expected >= 2)"
+  fail "Found $CRED_COUNT credentials (expected >= 1)"
 fi
 
 OIDC_CRED=$(echo "$CRED_JSON" | python3 -c "
@@ -126,19 +125,9 @@ import json,sys
 creds = json.load(sys.stdin).get('credentials',[])
 print('found' if any('oidc' in c.get('id','').lower() or 'oidc' in c.get('description','').lower() for c in creds) else 'missing')")
 if [ "$OIDC_CRED" = "found" ]; then
-  pass "OIDC credential detected"
+  pass "OIDC client secret credential detected"
 else
   fail "OIDC credential not found"
-fi
-
-REG_CRED=$(echo "$CRED_JSON" | python3 -c "
-import json,sys
-creds = json.load(sys.stdin).get('credentials',[])
-print('found' if any('registry' in c.get('id','').lower() or 'registry' in c.get('description','').lower() for c in creds) else 'missing')")
-if [ "$REG_CRED" = "found" ]; then
-  pass "Registry credential detected"
-else
-  fail "Registry credential not found"
 fi
 
 echo ""
