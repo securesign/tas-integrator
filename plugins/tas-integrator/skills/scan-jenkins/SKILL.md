@@ -225,9 +225,60 @@ Run a health check for every discovered endpoint:
 
 Store pass/fail for each endpoint check.
 
+#### 5e — OIDC Provider Type and Client Detection
+
+Classify the detected OIDC provider and, for Keycloak-based providers, probe for
+client type.
+
+**Provider Classification:**
+
+Examine the `oidc_issuer` URL pattern to determine the provider type:
+
+| Pattern | Provider Type | Notes |
+|---------|--------------|-------|
+| Contains `/realms/` or `/auth/realms/` | `keycloak` | Keycloak, RHBK, or Red Hat SSO |
+| Contains `token.actions.githubusercontent.com` | `github-actions` | GitHub Actions native OIDC |
+| Contains `gitlab.com` or ends with `.gitlab.io` | `gitlab-native` | GitLab native OIDC |
+| Contains `googleapis.com` or `accounts.google.com` | `google` | Google OAuth |
+| Contains `login.microsoftonline.com` or `sts.windows.net` | `microsoft` | Microsoft Entra ID |
+| Contains `.amazonaws.com` | `aws-sts` | Amazon Security Token Service |
+| Other | `generic` | Generic OIDC provider |
+
+Record `oidc_provider_type` for use in Step 8b blueprint generation.
+
+**Keycloak Client Type Detection:**
+
+If `oidc_provider_type` is `keycloak`, probe the token endpoint to detect whether
+the client is public or confidential:
+
+```bash
+PROBE_RESPONSE=$(curl -s -X POST \
+  "{{oidc_issuer}}/protocol/openid-connect/token" \
+  -d "grant_type=client_credentials" \
+  -d "client_id={{oidc_client_id}}" \
+  2>&1)
+```
+
+Classify the client type based on the error response:
+
+| Response Pattern | Client Type |
+|------------------|-------------|
+| Error contains `"public client"` or `"service account"` | `public` |
+| Error contains `"client secret"` or `"invalid credentials"` or `"unauthorized_client"` | `confidential` |
+| HTTP 200 (token returned) | `confidential` |
+| Unreachable or ambiguous | `unknown` (default to `public`) |
+
+Record `oidc_client_type` as `public`, `confidential`, or `unknown`.
+
+**Non-Keycloak Providers:**
+
+For non-Keycloak providers, skip client type detection and set `oidc_client_type`
+to `not-applicable`. The blueprint will include provider-specific guidance instead
+of Keycloak-specific snippets.
+
 ### Step 6 — Evaluate Gap Detection Rules
 
-Run all 24 rules from [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md)
+Run all 25 rules from [shared/knowledge-base/gap-detection-rules.md](../../shared/knowledge-base/gap-detection-rules.md)
 against the data collected in Steps 1–5. Record for each rule:
 
 | Field | Value |
@@ -243,11 +294,16 @@ against the data collected in Steps 1–5. Record for each rule:
 | Rule Category | Evaluate Using |
 |---------------|----------------|
 | `INFRA` | Use Step 5 endpoint discovery and health checks |
-| `OIDC` | Use Step 3 pipeline patterns + Step 5 environment variables |
+| `OIDC` | Use Step 3 pipeline patterns + Step 5 environment variables + Step 5e client type detection |
 | `SIGN` | Use Step 3 pipeline patterns |
 | `VERIFY` | Use Step 3 pipeline patterns |
 | `POLICY` | Use Step 5b Kubernetes CRD check (if available) |
 | `SUPPLY` | Use Step 3 pipeline patterns (SBOM tools, attestation commands) |
+
+**OIDC-005 Evaluation:** Evaluate OIDC-005 using the `oidc_client_type` result from Step 5e:
+- `pass` if client type is `public` or `confidential` (detected successfully)
+- `fail` if client type is `unknown` (detection failed or was skipped)
+- Include the detected client type in the `details` field
 
 Mark rules as `skip` when the required data source is unavailable (e.g., no
 `kubectl` access for POLICY rules).
@@ -344,46 +400,123 @@ Generate Groovy pipeline snippets using patterns from
 [shared/knowledge-base/cosign-signing-patterns.md](../../shared/knowledge-base/cosign-signing-patterns.md) and
 [shared/knowledge-base/oidc-setup.md](../../shared/knowledge-base/oidc-setup.md) (Jenkins section).
 
-Generate the signing stage — run `cosign initialize` then `cosign sign`:
+**Provider-Specific Token Acquisition:**
+
+Based on the `oidc_provider_type` detected in Step 5e, generate appropriate guidance:
+
+**For `keycloak` providers:**
+
+Generate Keycloak-specific snippets based on `oidc_client_type`:
+- **If `confidential`:** Use `client_credentials` grant with `OIDC_CLIENT_SECRET`
+- **If `public` or `unknown`:** Use `password` grant with `OIDC_USER`/`OIDC_PASSWORD`
+
+**For non-Keycloak providers:**
+
+Generate a guidance section instead of executable snippets. Include:
+- Provider name and detected issuer URL
+- Note that Jenkins lacks native OIDC for this provider
+- Link to RHTAS Deployment Guide section for the specific provider
+- Recommendation to use Keycloak/RHBK for Jenkins CI/CD automation
+
+See "Non-Keycloak Provider Guidance" section below for templates.
+
+---
+
+**Keycloak Signing Stage Snippets:**
+
+Generate the signing stage with conditional token acquisition for Keycloak providers:
+
+**For confidential clients:**
 
 ```groovy
 stage('Sign Image') {
     steps {
-        script {
-            // Confidential client: use grant_type=client_credentials with OIDC_CLIENT_SECRET
-            // Public client: use grant_type=password with OIDC_USER/OIDC_PASSWORD
-            def IDENTITY_TOKEN = sh(
-                script: """
-                    curl -s -X POST \
-                      "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
-                      -d "grant_type=client_credentials" \
-                      -d "client_id=\${OIDC_CLIENT_ID}" \
-                      -d "client_secret=\${OIDC_CLIENT_SECRET}" \
-                      | jq -r '.access_token'
-                """,
-                returnStdout: true
-            ).trim()
+        withCredentials([string(credentialsId: 'oidc-client-secret', variable: 'OIDC_CLIENT_SECRET')]) {
+            script {
+                def IDENTITY_TOKEN = sh(
+                    script: """
+                        curl -s -X POST \
+                          "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                          -d "grant_type=client_credentials" \
+                          -d "client_id=\${OIDC_CLIENT_ID}" \
+                          -d "client_secret=\${OIDC_CLIENT_SECRET}" \
+                          | jq -r '.access_token'
+                    """,
+                    returnStdout: true
+                ).trim()
 
-            sh """
-                ROOT_CHECKSUM=\$(curl -s "\${TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
-                cosign initialize \
-                  --mirror="\${TUF_URL}" \
-                  --root="\${TUF_URL}/1.root.json" \
-                  --root-checksum="\$ROOT_CHECKSUM"
+                sh """
+                    ROOT_CHECKSUM=\$(curl -s "\${TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
+                    cosign initialize \
+                      --mirror="\${TUF_URL}" \
+                      --root="\${TUF_URL}/1.root.json" \
+                      --root-checksum="\$ROOT_CHECKSUM"
 
-                cosign sign \
-                  --fulcio-url=\${FULCIO_URL} \
-                  --rekor-url=\${REKOR_URL} \
-                  --oidc-issuer=\${OIDC_ISSUER} \
-                  --oidc-client-id=\${OIDC_CLIENT_ID} \
-                  --identity-token=${IDENTITY_TOKEN} \
-                  --yes \
-                  \${IMAGE_REFERENCE}
-            """
+                    cosign sign \
+                      --fulcio-url=\${FULCIO_URL} \
+                      --rekor-url=\${REKOR_URL} \
+                      --oidc-issuer=\${OIDC_ISSUER} \
+                      --oidc-client-id=\${OIDC_CLIENT_ID} \
+                      --identity-token=${IDENTITY_TOKEN} \
+                      --yes \
+                      \${IMAGE_REFERENCE}
+                """
+            }
         }
     }
 }
 ```
+
+**For public clients:**
+
+```groovy
+stage('Sign Image') {
+    steps {
+        withCredentials([
+            usernamePassword(credentialsId: 'oidc-user-credentials', 
+                           usernameVariable: 'OIDC_USER', 
+                           passwordVariable: 'OIDC_PASSWORD')
+        ]) {
+            script {
+                def IDENTITY_TOKEN = sh(
+                    script: """
+                        curl -s -X POST \
+                          "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                          -d "grant_type=password" \
+                          -d "client_id=\${OIDC_CLIENT_ID}" \
+                          -d "username=\${OIDC_USER}" \
+                          -d "password=\${OIDC_PASSWORD}" \
+                          -d "scope=openid email" \
+                          | jq -r '.access_token'
+                    """,
+                    returnStdout: true
+                ).trim()
+
+                sh """
+                    ROOT_CHECKSUM=\$(curl -s "\${TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
+                    cosign initialize \
+                      --mirror="\${TUF_URL}" \
+                      --root="\${TUF_URL}/1.root.json" \
+                      --root-checksum="\$ROOT_CHECKSUM"
+
+                    cosign sign \
+                      --fulcio-url=\${FULCIO_URL} \
+                      --rekor-url=\${REKOR_URL} \
+                      --oidc-issuer=\${OIDC_ISSUER} \
+                      --oidc-client-id=\${OIDC_CLIENT_ID} \
+                      --identity-token=${IDENTITY_TOKEN} \
+                      --yes \
+                      \${IMAGE_REFERENCE}
+                """
+            }
+        }
+    }
+}
+```
+
+**Note:** Include both snippet variants in the blueprint with clear conditional
+headers indicating which one applies based on the detected client type. If client
+type is `unknown`, default to the public client snippet with a warning note.
 
 Generate the verification stage — run `cosign verify` with certificate identity:
 
@@ -401,40 +534,222 @@ stage('Verify Image') {
 }
 ```
 
-Generate the attestation stage — run `cosign attest` with SBOM predicates:
+Generate the attestation stage — run `cosign attest` with SBOM predicates.
+Use the same conditional token acquisition pattern as the signing stage:
+
+**For confidential clients:**
 
 ```groovy
 stage('Attest Image') {
     steps {
-        script {
-            def IDENTITY_TOKEN = sh(
-                script: """
-                    curl -s -X POST \
-                      "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
-                      -d "grant_type=client_credentials" \
-                      -d "client_id=\${OIDC_CLIENT_ID}" \
-                      -d "client_secret=\${OIDC_CLIENT_SECRET}" \
-                      | jq -r '.access_token'
-                """,
-                returnStdout: true
-            ).trim()
+        withCredentials([string(credentialsId: 'oidc-client-secret', variable: 'OIDC_CLIENT_SECRET')]) {
+            script {
+                def IDENTITY_TOKEN = sh(
+                    script: """
+                        curl -s -X POST \
+                          "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                          -d "grant_type=client_credentials" \
+                          -d "client_id=\${OIDC_CLIENT_ID}" \
+                          -d "client_secret=\${OIDC_CLIENT_SECRET}" \
+                          | jq -r '.access_token'
+                    """,
+                    returnStdout: true
+                ).trim()
 
-            sh """
-                cosign attest \
-                  --fulcio-url=\${FULCIO_URL} \
-                  --rekor-url=\${REKOR_URL} \
-                  --oidc-issuer=\${OIDC_ISSUER} \
-                  --oidc-client-id=\${OIDC_CLIENT_ID} \
-                  --identity-token=${IDENTITY_TOKEN} \
-                  --predicate=\${SBOM_FILE} \
-                  --type=spdxjson \
-                  --yes \
-                  \${IMAGE_REFERENCE}
-            """
+                sh """
+                    cosign attest \
+                      --fulcio-url=\${FULCIO_URL} \
+                      --rekor-url=\${REKOR_URL} \
+                      --oidc-issuer=\${OIDC_ISSUER} \
+                      --oidc-client-id=\${OIDC_CLIENT_ID} \
+                      --identity-token=${IDENTITY_TOKEN} \
+                      --predicate=\${SBOM_FILE} \
+                      --type=spdxjson \
+                      --yes \
+                      \${IMAGE_REFERENCE}
+                """
+            }
         }
     }
 }
 ```
+
+**For public clients:**
+
+```groovy
+stage('Attest Image') {
+    steps {
+        withCredentials([
+            usernamePassword(credentialsId: 'oidc-user-credentials', 
+                           usernameVariable: 'OIDC_USER', 
+                           passwordVariable: 'OIDC_PASSWORD')
+        ]) {
+            script {
+                def IDENTITY_TOKEN = sh(
+                    script: """
+                        curl -s -X POST \
+                          "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                          -d "grant_type=password" \
+                          -d "client_id=\${OIDC_CLIENT_ID}" \
+                          -d "username=\${OIDC_USER}" \
+                          -d "password=\${OIDC_PASSWORD}" \
+                          -d "scope=openid email" \
+                          | jq -r '.access_token'
+                    """,
+                    returnStdout: true
+                ).trim()
+
+                sh """
+                    cosign attest \
+                      --fulcio-url=\${FULCIO_URL} \
+                      --rekor-url=\${REKOR_URL} \
+                      --oidc-issuer=\${OIDC_ISSUER} \
+                      --oidc-client-id=\${OIDC_CLIENT_ID} \
+                      --identity-token=${IDENTITY_TOKEN} \
+                      --predicate=\${SBOM_FILE} \
+                      --type=spdxjson \
+                      --yes \
+                      \${IMAGE_REFERENCE}
+                """
+            }
+        }
+    }
+}
+```
+
+---
+
+**Non-Keycloak Provider Guidance:**
+
+For non-Keycloak providers, generate a guidance section in the blueprint instead of
+Jenkinsfile snippets. Use the templates below based on `oidc_provider_type`:
+
+**GitHub Actions:**
+```markdown
+## ⚠️ GitHub Actions OIDC Detected
+
+Your RHTAS deployment is configured with GitHub Actions as the OIDC provider:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Limitation:** Jenkins does not provide native integration with GitHub
+Actions OIDC. GitHub Actions OIDC tokens are only available within GitHub Actions
+workflows.
+
+**Recommended Approach:**
+1. **Option A (Recommended):** Configure Keycloak or Red Hat SSO as an additional
+   OIDC issuer in Fulcio for Jenkins-based signing. See the RHTAS Deployment Guide
+   section on "Configuring multiple OIDC issuers."
+
+2. **Option B:** Perform signing within GitHub Actions workflows instead of Jenkins.
+   Refer to the RHTAS Deployment Guide section on "Signing with GitHub Actions."
+```
+
+**Google OAuth:**
+```markdown
+## ⚠️ Google OAuth OIDC Detected
+
+Your RHTAS deployment is configured with Google OAuth as the OIDC provider:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Limitation:** Google OAuth uses browser-based authentication flows and is
+not suitable for Jenkins CI/CD automation (non-interactive pipelines).
+
+**Recommended Approach:**
+Configure Keycloak or Red Hat SSO as the OIDC issuer for CI/CD automation. Keycloak
+can optionally federate to Google for interactive user authentication while providing
+service account credentials for Jenkins pipelines.
+
+Refer to the RHTAS Deployment Guide sections:
+- "Configuring Keycloak OIDC Issuer"
+- "Keycloak Identity Provider Federation" (optional Google integration)
+```
+
+**Microsoft Entra ID:**
+```markdown
+## ⚠️ Microsoft Entra ID OIDC Detected
+
+Your RHTAS deployment is configured with Microsoft Entra ID as the OIDC provider:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Limitation:** Microsoft Entra ID uses browser-based authentication flows
+and is not suitable for Jenkins CI/CD automation (non-interactive pipelines).
+
+**Recommended Approach:**
+Configure Keycloak or Red Hat SSO as the OIDC issuer for CI/CD automation. Keycloak
+can optionally federate to Microsoft Entra ID for interactive user authentication
+while providing service account credentials for Jenkins pipelines.
+
+Refer to the RHTAS Deployment Guide sections:
+- "Configuring Keycloak OIDC Issuer"
+- "Configuring Microsoft Entra ID" (for user federation)
+```
+
+**AWS STS:**
+```markdown
+## ⚠️ Amazon STS OIDC Detected
+
+Your RHTAS deployment is configured with Amazon Security Token Service:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Limitation:** AWS STS uses Kubernetes service account tokens and requires
+pods running in an EKS cluster with IAM roles for service accounts (IRSA) configured.
+
+**Recommended Approach:**
+1. **If Jenkins runs on EKS:** Configure Jenkins pod service accounts and refer to
+   the RHTAS Deployment Guide section on "Signing with Amazon STS."
+
+2. **If Jenkins runs elsewhere:** Configure Keycloak or Red Hat SSO as an additional
+   OIDC issuer for Jenkins-based signing.
+```
+
+**GitLab (Native OIDC):**
+```markdown
+## ⚠️ GitLab Native OIDC Detected
+
+Your RHTAS deployment is configured with GitLab native OIDC:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Limitation:** Jenkins does not provide native integration with GitLab OIDC.
+GitLab OIDC tokens (`id_tokens` keyword) are only available within GitLab CI pipelines.
+
+**Recommended Approach:**
+1. **Option A (Recommended):** Configure Keycloak or Red Hat SSO as an additional
+   OIDC issuer in Fulcio for Jenkins-based signing.
+
+2. **Option B:** Perform signing within GitLab CI pipelines instead of Jenkins.
+   Refer to the RHTAS Deployment Guide section on "Signing with GitLab CI."
+```
+
+**Generic OIDC Provider:**
+```markdown
+## ⚠️ Generic OIDC Provider Detected
+
+Your RHTAS deployment is configured with a custom OIDC provider:
+- **Issuer:** {{oidc_issuer}}
+- **Client ID:** {{oidc_client_id}}
+
+**Jenkins Integration:** Token acquisition depends on your OIDC provider's
+supported grant types. Jenkins requires programmatic token access (non-interactive).
+
+**Recommended Approaches:**
+1. Check if your OIDC provider supports `client_credentials` grant (service accounts)
+   or `password` grant (resource owner credentials).
+
+2. Consult your OIDC provider's documentation for CI/CD integration patterns.
+
+3. For enterprise Jenkins deployments, consider using Keycloak or Red Hat SSO, which
+   provide well-tested CI/CD integration patterns and can federate to your existing
+   identity provider.
+
+Refer to the RHTAS Deployment Guide section on "Configuring custom OIDC issuers."
+```
+
+---
 
 Substitute detected endpoint URLs for environment variable references when
 known. Keep variable references when endpoints are not detected so the user
@@ -544,7 +859,7 @@ Read these knowledge-base files during scanning:
 
 | File | Read to |
 |------|---------|
-| [`shared/knowledge-base/gap-detection-rules.md`](../../shared/knowledge-base/gap-detection-rules.md) | Evaluate all 24 gap checks across 6 categories |
+| [`shared/knowledge-base/gap-detection-rules.md`](../../shared/knowledge-base/gap-detection-rules.md) | Evaluate all 25 gap checks across 6 categories |
 | [`shared/knowledge-base/cosign-signing-patterns.md`](../../shared/knowledge-base/cosign-signing-patterns.md) | Generate Jenkinsfile snippets with correct `cosign` CLI flags |
 | [`shared/knowledge-base/tas-endpoint-config.md`](../../shared/knowledge-base/tas-endpoint-config.md) | Map endpoint URLs, run health checks, and set CI/CD variables |
 | [`shared/knowledge-base/oidc-setup.md`](../../shared/knowledge-base/oidc-setup.md) | Configure OIDC issuer, Keycloak integration, and Jenkins token injection |

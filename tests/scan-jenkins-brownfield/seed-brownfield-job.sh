@@ -22,15 +22,33 @@ JENKINS_USER="${JENKINS_USER:-admin}"
 JENKINS_PASS="${JENKINS_PASS:-admin123}"
 MOCK_TAS_URL="${MOCK_TAS_URL:-http://localhost:8090}"
 
-TAS_FULCIO_URL="${TAS_FULCIO_URL:-${MOCK_TAS_URL}/fulcio}"
-TAS_REKOR_URL="${TAS_REKOR_URL:-${MOCK_TAS_URL}/rekor}"
-TAS_TSA_URL="${TAS_TSA_URL:-${MOCK_TAS_URL}/api/v1/timestamp}"
 TAS_TUF_URL="${TAS_TUF_URL:-${MOCK_TAS_URL}/tuf}"
 TAS_OIDC_ISSUER="${TAS_OIDC_ISSUER:-${MOCK_TAS_URL}/oidc}"
 TAS_OIDC_CLIENT_ID="${TAS_OIDC_CLIENT_ID:-trusted-artifact-signer}"
 TAS_NAMESPACE="${TAS_NAMESPACE:-}"
-REGISTRY_USER="${REGISTRY_USER:-robot-user}"
-REGISTRY_PASS="${REGISTRY_PASS:-mock-registry-token}"
+
+# --- Trust TAS server certificates ---
+# Extract and install CA certificate for TLS verification
+if echo "$TAS_TUF_URL" | grep -q '^https://'; then
+  echo "=== Installing TAS CA certificate ==="
+  TAS_HOST="${TAS_TUF_URL#https://}"
+  TAS_HOST="${TAS_HOST%%/*}"
+
+  echo "  Extracting certificate from ${TAS_HOST}:443..."
+  echo | openssl s_client -showcerts -connect "${TAS_HOST}:443" 2>/dev/null \
+    | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > /tmp/tuf-ca.crt
+
+  if [ -s /tmp/tuf-ca.crt ]; then
+    echo "  Installing certificate to system trust store..."
+    sudo cp /tmp/tuf-ca.crt /etc/pki/ca-trust/source/anchors/tuf-ca.crt
+    sudo update-ca-trust
+    echo "  CA certificate installed."
+  else
+    echo "  WARNING: Could not extract certificate from ${TAS_HOST}"
+    echo "    TLS verification may fail for TAS operations."
+  fi
+  echo ""
+fi
 
 # --- Keycloak auto-config for client_credentials ---
 # Reconfigures the Keycloak client via CRDs — the same mechanism the
@@ -269,7 +287,7 @@ if [ -n "$CRUMB" ]; then
 fi
 
 # --- Create pipeline job with TAS cosign commands ---
-cat <<JOBXML > /tmp/tas-container-build-config.xml
+cat <<'JOBXML' > /tmp/tas-container-build-config.xml
 <?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job">
   <description>Container build pipeline with TAS signing integration</description>
@@ -279,16 +297,12 @@ pipeline {
     agent any
 
     environment {
-        REGISTRY = 'quay.io/myorg'
-        IMAGE_NAME = 'my-app'
-        IMAGE_TAG = "\${BUILD_NUMBER}"
-        TAS_FULCIO_URL = '${TAS_FULCIO_URL}'
-        TAS_REKOR_URL = '${TAS_REKOR_URL}'
-        TAS_TSA_URL = '${TAS_TSA_URL}'
-        TAS_TUF_URL = '${TAS_TUF_URL}'
-        TAS_OIDC_ISSUER = '${TAS_OIDC_ISSUER}'
-        TAS_OIDC_CLIENT_ID = '${TAS_OIDC_CLIENT_ID}'
-        COSIGN_REKOR_URL = '${TAS_REKOR_URL}'
+        REGISTRY = 'ttl.sh'
+        IMAGE_NAME = 'tas-test-app'
+        IMAGE_TAG = 'brownfield-1h'
+        TAS_TUF_URL = '__TAS_TUF_URL__'
+        TAS_OIDC_ISSUER = '__TAS_OIDC_ISSUER__'
+        TAS_OIDC_CLIENT_ID = '__TAS_OIDC_CLIENT_ID__'
     }
 
     stages {
@@ -312,14 +326,29 @@ pipeline {
 
         stage('Initialize TUF') {
             steps {
-                echo 'Initializing TUF root of trust...'
-                sh """
-                    ROOT_CHECKSUM=\$(curl -s "\${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
-                    cosign initialize \\
-                        --mirror="\${TAS_TUF_URL}" \\
-                        --root="\${TAS_TUF_URL}/1.root.json" \\
-                        --root-checksum="\$ROOT_CHECKSUM"
-                """
+                echo 'Initializing TUF for TAS...'
+                sh '''
+                    # Remove any cached sigstore config
+                    rm -rf /var/jenkins_home/.sigstore || true
+
+                    # Extract TAS server CA certificate for TLS verification
+                    TAS_HOST=$(echo "${TAS_TUF_URL}" | sed 's|^https://||' | cut -d/ -f1)
+                    echo | openssl s_client -showcerts -connect "${TAS_HOST}:443" 2>/dev/null \
+                        | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > /tmp/tuf-ca.crt
+
+                    # Set CA cert for TUF initialization
+                    export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                    export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+
+                    # Initialize TUF
+                    ROOT_CHECKSUM=$(curl -s "${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
+                    cosign initialize \
+                        --mirror="${TAS_TUF_URL}" \
+                        --root="${TAS_TUF_URL}/1.root.json" \
+                        --root-checksum="${ROOT_CHECKSUM}"
+
+                    echo "TUF initialized successfully"
+                '''
             }
         }
 
@@ -328,26 +357,28 @@ pipeline {
                 withCredentials([string(credentialsId: 'oidc-client-secret', variable: 'OIDC_CLIENT_SECRET')]) {
                     script {
                         def IDENTITY_TOKEN = sh(
-                            script: """
-                                curl -s -X POST \\
-                                  "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \\
-                                  -d "grant_type=client_credentials" \\
-                                  -d "client_id=\${TAS_OIDC_CLIENT_ID}" \\
-                                  -d "client_secret=\${OIDC_CLIENT_SECRET}" \\
-                                  | jq -r '.access_token'
-                            """,
+                            script: '''
+                                export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                                export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+                                curl -s -X POST \
+                                  "${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                                  -d "grant_type=client_credentials" \
+                                  -d "client_id=${TAS_OIDC_CLIENT_ID}" \
+                                  -d "client_secret=${OIDC_CLIENT_SECRET}" \
+                                  | grep -o '"access_token":"[^"]*"' \
+                                  | cut -d'"' -f4
+                            ''',
                             returnStdout: true
                         ).trim()
 
                         sh """
-                            cosign sign \\
-                                --fulcio-url=\${TAS_FULCIO_URL} \\
-                                --rekor-url=\${TAS_REKOR_URL} \\
-                                --oidc-issuer=\${TAS_OIDC_ISSUER} \\
-                                --oidc-client-id=\${TAS_OIDC_CLIENT_ID} \\
-                                --identity-token=\${IDENTITY_TOKEN} \\
-                                --yes \\
-                                \${REGISTRY}/\${IMAGE_NAME}:\${IMAGE_TAG}
+                            export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                            export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+                            export COSIGN_YES=true
+                            export COSIGN_OIDC_CLIENT_ID=${TAS_OIDC_CLIENT_ID}
+                            export SIGSTORE_ID_TOKEN=${IDENTITY_TOKEN}
+
+                            cosign sign ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
                         """
                     }
                 }
@@ -357,13 +388,15 @@ pipeline {
         stage('Verify Image') {
             steps {
                 echo 'Verifying container image signature...'
-                sh """
-                    cosign verify \\
-                        --rekor-url=\${TAS_REKOR_URL} \\
-                        --certificate-identity=user@example.com \\
-                        --certificate-oidc-issuer=\${TAS_OIDC_ISSUER} \\
-                        \${REGISTRY}/\${IMAGE_NAME}:\${IMAGE_TAG}
-                """
+                sh '''
+                    export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                    export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+
+                    cosign verify \
+                        --certificate-identity=service-account@trusted-artifact-signer.local \
+                        --certificate-oidc-issuer=${TAS_OIDC_ISSUER} \
+                        ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                '''
             }
         }
 
@@ -385,6 +418,12 @@ pipeline {
   </definition>
 </flow-definition>
 JOBXML
+
+sed -i \
+  -e "s|__TAS_TUF_URL__|${TAS_TUF_URL}|g" \
+  -e "s|__TAS_OIDC_ISSUER__|${TAS_OIDC_ISSUER}|g" \
+  -e "s|__TAS_OIDC_CLIENT_ID__|${TAS_OIDC_CLIENT_ID}|g" \
+  /tmp/tas-container-build-config.xml
 
 echo "Creating pipeline job 'tas-container-build'..."
 curl -s -u "${JENKINS_USER}:${JENKINS_PASS}" \
@@ -414,26 +453,6 @@ curl -s -u "${JENKINS_USER}:${JENKINS_PASS}" \
 
 echo ""
 
-# --- Create registry credentials ---
-cat <<CREDXML > /tmp/registry-cred.xml
-<com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
-  <scope>GLOBAL</scope>
-  <id>registry-credentials</id>
-  <description>Quay registry push credentials</description>
-  <username>${REGISTRY_USER}</username>
-  <password>${REGISTRY_PASS}</password>
-</com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
-CREDXML
-
-echo "Creating credential 'registry-credentials'..."
-curl -s -u "${JENKINS_USER}:${JENKINS_PASS}" \
-  ${CRUMB_HEADER} \
-  -X POST "${JENKINS_URL}/credentials/store/system/domain/_/createCredentials" \
-  -H "Content-Type: application/xml" \
-  --data-binary @/tmp/registry-cred.xml
-
-echo ""
-
 # --- Verify ---
 echo "Verifying job..."
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" -u "${JENKINS_USER}:${JENKINS_PASS}" \
@@ -452,4 +471,25 @@ CRED_COUNT=$(curl -s -u "${JENKINS_USER}:${JENKINS_PASS}" \
   python3 -c "import json,sys; print(len(json.load(sys.stdin).get('credentials',[])))")
 echo "Found ${CRED_COUNT} credential(s)."
 
-rm -f /tmp/tas-container-build-config.xml /tmp/oidc-cred.xml /tmp/registry-cred.xml
+rm -f /tmp/tas-container-build-config.xml /tmp/oidc-cred.xml
+
+# --- Build and push test image from host ---
+echo ""
+echo "Building and pushing test image from host..."
+TEST_IMAGE="ttl.sh/tas-test-app:brownfield-1h"
+
+mkdir -p /tmp/tas-test-build
+cat > /tmp/tas-test-build/Dockerfile <<'EOF'
+FROM scratch
+LABEL test=true
+LABEL description="TAS integration test image"
+EOF
+
+echo "Building ${TEST_IMAGE}..."
+podman build -t "${TEST_IMAGE}" /tmp/tas-test-build/
+
+echo "Pushing ${TEST_IMAGE}..."
+podman push "${TEST_IMAGE}"
+
+echo "Test image pushed: ${TEST_IMAGE}"
+rm -rf /tmp/tas-test-build

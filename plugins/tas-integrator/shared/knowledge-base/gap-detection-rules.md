@@ -126,6 +126,16 @@ guidance.
 | Pass Condition | Discovery document returned with valid JSON |
 | Remediation | Check network connectivity, DNS resolution, and TLS trust for the OIDC provider |
 
+### OIDC-005: OIDC Provider Type and Configuration Detected
+
+| Field | Value |
+|-------|-------|
+| Severity | Medium |
+| Description | The OIDC provider type determines token acquisition patterns and CI/CD integration approach. For Keycloak providers, client type (public vs confidential) affects the grant type used |
+| Detection | Classify provider from issuer URL pattern (Keycloak, GitHub Actions, Google, Microsoft, AWS STS, GitLab, generic). For Keycloak: probe token endpoint with `grant_type=client_credentials` to detect client type |
+| Pass Condition | Provider type successfully identified. For Keycloak: client type determined as public or confidential |
+| Remediation | If Keycloak detection fails, verify the OIDC issuer URL and token endpoint. For non-Keycloak providers in Jenkins, consider adding Keycloak/RHBK as a secondary issuer for CI/CD automation. Refer to RHTAS Deployment Guide for provider-specific configuration |
+
 ---
 
 ## Signing Rules
@@ -168,7 +178,7 @@ guidance.
 | Description | Cosign must be initialized with the TAS TUF root before signing |
 | Detection | Search for `cosign initialize` command with `--mirror` and `--root` flags |
 | Pass Condition | TUF initialization step present before signing step |
-| Remediation | Add TUF initialization with checksum verification before signing: `ROOT_CHECKSUM=$(curl -s "{{tuf_url}}/1.root.json" \| sha256sum \| awk '{print $1}'); cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/1.root.json --root-checksum=$ROOT_CHECKSUM` |
+| Remediation | Add `ROOT_CHECKSUM=$(curl -s "{{tuf_url}}/1.root.json" \| sha256sum \| awk '{print $1}'); cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/1.root.json --root-checksum=$ROOT_CHECKSUM` before signing |
 
 ### SIGN-005: Confirmation Prompt Suppressed
 
