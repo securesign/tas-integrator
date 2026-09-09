@@ -155,13 +155,20 @@ response, prompt the user for a token and retry.
 | `--rekor-url` | Detect Rekor endpoint config |
 | `--oidc-issuer` | Detect OIDC issuer config |
 | `--identity-token` | Detect identity token injection |
+| `--use-signing-config=false` | Detect explicit URL mode (TUF disabled) |
 | `COSIGN_REKOR_URL` | Detect Rekor URL via variable |
 | `SIGSTORE_ID_TOKEN` | Detect Sigstore OIDC token variable |
 | `id_tokens:` | Detect GitLab native OIDC token |
 
-4. Store the total number of projects scanned, which patterns matched in
+4. **Detect current signing-config mode** in existing pipelines:
+   - If `cosign initialize` found AND no `--use-signing-config=false` → **Current mode: TUF**
+   - If `--use-signing-config=false` OR explicit `--fulcio-url`/`--rekor-url` flags without `cosign initialize` → **Current mode: Explicit URLs**
+   - If `cosign sign` found but neither pattern detected → **Current mode: Unknown** (legacy/non-standard)
+   - If no `cosign` commands found → **Current mode: None** (no existing integration)
+
+5. Store the total number of projects scanned, which patterns matched in
    which projects, whether signing/verification/attestation steps exist,
-   and whether `id_tokens:` is used for OIDC.
+   whether `id_tokens:` is used for OIDC, and the **detected current mode**.
 
 ### Step 4 — Scan CI/CD Variables
 
@@ -371,6 +378,137 @@ Generate YAML pipeline snippets using patterns from
 Prefer GitLab's native `id_tokens` keyword for OIDC token acquisition — unlike
 Jenkins, no external Keycloak token fetch is needed.
 
+---
+
+**Mode Selection: TUF Mode vs Explicit URL Mode**
+
+Choose which mode to generate based on existing configuration, TUF availability, and user preference.
+
+**Priority order (highest to lowest):**
+
+| Priority | Condition | Mode | Reason |
+|----------|-----------|------|--------|
+| 1 | User explicitly asks for `--use-signing-config=false` or "explicit URLs" | **Explicit URL Mode** | Honor user override request |
+| 2 | Existing pipelines use TUF mode (`cosign initialize` detected) | **TUF Mode** | Preserve current configuration |
+| 3 | Existing pipelines use Explicit URL mode (`--use-signing-config=false` detected) | **Explicit URL Mode** | Preserve current configuration |
+| 4 | No existing integration + TUF endpoint detected | **TUF Mode (Recommended)** | Greenfield - use best practice |
+| 5 | No existing integration + TUF NOT detected | **Explicit URL Mode** | TUF unavailable, fallback required |
+
+**Decision Logic:**
+
+1. Check if user explicitly requested explicit URL mode in their query (see detection patterns below)
+   - If yes → **Use Explicit URL Mode** (override everything)
+2. Check `current_mode` from Step 3 pipeline scanning:
+   - If `TUF` → **Use TUF Mode** (preserve existing)
+   - If `Explicit URLs` → **Use Explicit URL Mode** (preserve existing)
+   - If `Unknown` or `None` → Continue to step 3
+3. Check if `tuf_url` was discovered in Step 5:
+   - If yes → **Use TUF Mode** (greenfield recommendation)
+   - If no → **Use Explicit URL Mode** (fallback)
+
+**User Query Detection:** Look for these phrases to detect explicit URL mode override:
+- "use explicit URLs"
+- "without TUF"
+- "--use-signing-config=false"
+- "don't use TUF"
+- "explicit service URLs"
+- "disable signing config"
+
+**Mode Recommendation Output:**
+
+Include a recommendation section in the blueprint that explains the choice and alternatives:
+
+```markdown
+## 🎯 Signing-Config Mode: {{selected_mode}}
+
+**Current Configuration:** {{current_mode_status}}
+**Selected Mode:** {{selected_mode}} ({{selection_reason}})
+
+### Mode Comparison
+
+| Aspect | TUF Mode | Explicit URL Mode |
+|--------|----------|-------------------|
+| **Security** | ✅ Uses TUF for service discovery & root-of-trust | ⚠️ Manual URL configuration, no automatic root updates |
+| **Maintenance** | ✅ Automatic service URL updates via TUF | ⚠️ Manual updates needed when URLs change |
+| **Setup Complexity** | Requires `cosign initialize` once | Simpler - no initialization step |
+| **URL Management** | Hidden in TUF metadata | Explicit in pipeline code |
+| **RHTAS Compatibility** | ✅ Recommended for RHTAS 1.0+ | Compatible with all versions |
+| **Transparency** | Service URLs abstracted | Service URLs visible in pipeline |
+
+### When to Use TUF Mode (Recommended)
+
+✅ **Use TUF Mode if:**
+- TUF service is available and reachable
+- You want automatic root-of-trust updates
+- You prefer centralized service URL management
+- You're following RHTAS deployment best practices
+- **Current status:** {{tuf_recommendation_status}}
+
+### When to Use Explicit URL Mode
+
+✅ **Use Explicit URL Mode if:**
+- TUF service is unavailable or unreachable from GitLab runners
+- You need full visibility of service URLs in pipeline code
+- You're migrating from Sigstore Public Good to RHTAS
+- You have compliance requirements for explicit service configuration
+- **Current status:** {{explicit_recommendation_status}}
+
+### Recommendation
+
+{{mode_recommendation_text}}
+```
+
+**Placeholder substitutions:**
+
+| Placeholder | Value |
+|-------------|-------|
+| `{{selected_mode}}` | `TUF Mode` or `Explicit URL Mode` |
+| `{{current_mode_status}}` | `TUF Mode detected in 3 pipelines` / `Explicit URL Mode detected in 2 pipelines` / `No existing integration` / `Unknown configuration` |
+| `{{selection_reason}}` | Why this mode was chosen per priority table |
+| `{{tuf_recommendation_status}}` | `✅ TUF available at {{tuf_url}}` or `❌ TUF not detected` |
+| `{{explicit_recommendation_status}}` | `✅ All service URLs detected` or `⚠️ Some URLs missing - will use placeholders` |
+| `{{mode_recommendation_text}}` | Custom recommendation based on scan results |
+
+**Example recommendations:**
+
+*Scenario 1: TUF available, no existing integration (greenfield)*
+```
+We recommend **TUF Mode** for this greenfield deployment. TUF provides better security 
+and simpler long-term maintenance. Your TUF service at {{tuf_url}} is reachable and 
+healthy.
+
+If you prefer explicit URLs for transparency, re-run with "use explicit URLs" in your request.
+```
+
+*Scenario 2: Existing pipelines use TUF mode*
+```
+Your existing pipelines already use **TUF Mode** (detected `cosign initialize` in 3 
+pipelines). This blueprint preserves that configuration for consistency.
+
+To migrate to Explicit URL Mode, re-run with "use explicit URLs" in your request.
+```
+
+*Scenario 3: TUF unavailable (forced explicit mode)*
+```
+**TUF Mode is recommended** but your TUF service is currently unreachable from GitLab 
+runners. This blueprint uses **Explicit URL Mode** as a fallback.
+
+Once TUF connectivity is established, consider migrating to TUF Mode for better security 
+and easier maintenance.
+```
+
+*Scenario 4: User explicitly requested explicit URLs*
+```
+Using **Explicit URL Mode** per your request. All service URLs will be explicitly 
+configured in pipeline environment variables.
+
+TUF Mode is available ({{tuf_url}}) if you prefer centralized service management in the future.
+```
+
+---
+
+**TUF Mode Snippets:**
+
 Generate the signing job — run `cosign initialize` then `cosign sign` with
 GitLab's native `id_tokens`:
 
@@ -444,6 +582,127 @@ attest-image:
         --yes
         ${IMAGE_REFERENCE}
 ```
+
+---
+
+**Explicit URL Mode Snippets (when TUF not available or user requests it):**
+
+If TUF is not available or user explicitly requests `--use-signing-config=false`,
+generate these snippets instead (no `cosign initialize`, explicit URL flags with
+`--use-signing-config=false`).
+
+**Note:** Even without TUF, you still need to extract and trust the TAS server CA
+certificate for HTTPS calls. Add this to the `before_script` of signing/verification jobs:
+
+```yaml
+before_script:
+  - |
+    # Extract TAS server CA certificate for TLS verification
+    TAS_HOST=$(echo "${TAS_FULCIO_URL}" | sed 's|^https://||' | cut -d/ -f1)
+    echo | openssl s_client -showcerts -connect "${TAS_HOST}:443" 2>/dev/null \
+        | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > /tmp/tas-ca.crt
+    export SSL_CERT_FILE=/tmp/tas-ca.crt
+    export CURL_CA_BUNDLE=/tmp/tas-ca.crt
+```
+
+**Signing job (Explicit URL mode):**
+
+```yaml
+sign-image:
+  stage: sign
+  image: registry.redhat.io/rhtas/cosign-rhel9:latest
+  id_tokens:
+    SIGSTORE_ID_TOKEN:
+      aud: trusted-artifact-signer
+  variables:
+    TAS_FULCIO_URL: ${TAS_FULCIO_URL}
+    TAS_REKOR_URL: ${TAS_REKOR_URL}
+    TAS_OIDC_ISSUER: ${TAS_OIDC_ISSUER}
+  before_script:
+    - |
+      # Extract TAS server CA certificate
+      TAS_HOST=$(echo "${TAS_FULCIO_URL}" | sed 's|^https://||' | cut -d/ -f1)
+      echo | openssl s_client -showcerts -connect "${TAS_HOST}:443" 2>/dev/null \
+          | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > /tmp/tas-ca.crt
+      export SSL_CERT_FILE=/tmp/tas-ca.crt
+      export CURL_CA_BUNDLE=/tmp/tas-ca.crt
+  script:
+    - cosign sign
+        --use-signing-config=false
+        --fulcio-url=${TAS_FULCIO_URL}
+        --rekor-url=${TAS_REKOR_URL}
+        --oidc-issuer=${TAS_OIDC_ISSUER}
+        --oidc-client-id=trusted-artifact-signer
+        --identity-token=${SIGSTORE_ID_TOKEN}
+        --yes
+        ${IMAGE_REFERENCE}
+```
+
+**Verification job (Explicit URL mode):**
+
+```yaml
+verify-image:
+  stage: verify
+  image: registry.redhat.io/rhtas/cosign-rhel9:latest
+  variables:
+    TAS_REKOR_URL: ${TAS_REKOR_URL}
+    TAS_OIDC_ISSUER: ${TAS_OIDC_ISSUER}
+  before_script:
+    - |
+      # Extract TAS server CA certificate
+      TAS_HOST=$(echo "${TAS_REKOR_URL}" | sed 's|^https://||' | cut -d/ -f1)
+      echo | openssl s_client -showcerts -connect "${TAS_HOST}:443" 2>/dev/null \
+          | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > /tmp/tas-ca.crt
+      export SSL_CERT_FILE=/tmp/tas-ca.crt
+      export CURL_CA_BUNDLE=/tmp/tas-ca.crt
+  script:
+    - cosign verify
+        --use-signing-config=false
+        --rekor-url=${TAS_REKOR_URL}
+        --certificate-identity=${EXPECTED_IDENTITY}
+        --certificate-oidc-issuer=${TAS_OIDC_ISSUER}
+        ${IMAGE_REFERENCE}
+```
+
+**Attestation job (Explicit URL mode):**
+
+```yaml
+attest-image:
+  stage: sign
+  image: registry.redhat.io/rhtas/cosign-rhel9:latest
+  id_tokens:
+    SIGSTORE_ID_TOKEN:
+      aud: trusted-artifact-signer
+  variables:
+    TAS_FULCIO_URL: ${TAS_FULCIO_URL}
+    TAS_REKOR_URL: ${TAS_REKOR_URL}
+    TAS_OIDC_ISSUER: ${TAS_OIDC_ISSUER}
+  before_script:
+    - |
+      # Extract TAS server CA certificate
+      TAS_HOST=$(echo "${TAS_FULCIO_URL}" | sed 's|^https://||' | cut -d/ -f1)
+      echo | openssl s_client -showcerts -connect "${TAS_HOST}:443" 2>/dev/null \
+          | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > /tmp/tas-ca.crt
+      export SSL_CERT_FILE=/tmp/tas-ca.crt
+      export CURL_CA_BUNDLE=/tmp/tas-ca.crt
+  script:
+    - cosign attest
+        --use-signing-config=false
+        --fulcio-url=${TAS_FULCIO_URL}
+        --rekor-url=${TAS_REKOR_URL}
+        --oidc-issuer=${TAS_OIDC_ISSUER}
+        --oidc-client-id=trusted-artifact-signer
+        --identity-token=${SIGSTORE_ID_TOKEN}
+        --predicate=${SBOM_FILE}
+        --type=spdxjson
+        --yes
+        ${IMAGE_REFERENCE}
+```
+
+**Note:** Explicit URL mode requires setting all service URLs as CI/CD variables
+(TAS_FULCIO_URL, TAS_REKOR_URL, TAS_TSA_URL, TAS_OIDC_ISSUER).
+
+---
 
 Substitute detected endpoint URLs for variable references when known.
 Keep variable references when endpoints are not detected so the user can
@@ -551,6 +810,7 @@ Read these knowledge-base files during scanning:
 | File | Read to |
 |------|---------|
 | [`shared/knowledge-base/gap-detection-rules.md`](../../shared/knowledge-base/gap-detection-rules.md) | Evaluate all 24 gap checks across 6 categories |
+| [`shared/knowledge-base/redhat-cosign-tuf-patterns.md`](../../shared/knowledge-base/redhat-cosign-tuf-patterns.md) | **CRITICAL:** Choose between TUF mode vs explicit URL mode for Red Hat cosign 3.x to avoid "cannot specify service URLs and use signing config" errors |
 | [`shared/knowledge-base/cosign-signing-patterns.md`](../../shared/knowledge-base/cosign-signing-patterns.md) | Generate `.gitlab-ci.yml` snippets with correct `cosign` CLI flags |
 | [`shared/knowledge-base/tas-endpoint-config.md`](../../shared/knowledge-base/tas-endpoint-config.md) | Map endpoint URLs, run health checks, and set CI/CD variables |
 | [`shared/knowledge-base/oidc-setup.md`](../../shared/knowledge-base/oidc-setup.md) | Configure OIDC issuer, GitLab native `id_tokens`, and token injection |

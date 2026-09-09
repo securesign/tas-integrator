@@ -4,3 +4,5 @@ credentials-binding:latest
 docker-workflow:latest
 pipeline-utility-steps:latest
 git:latest
+dashboard-view:latest
+pipeline-stage-view:latest

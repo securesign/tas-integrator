@@ -23,9 +23,15 @@ JENKINS_PASS="${JENKINS_PASS:-admin123}"
 MOCK_TAS_URL="${MOCK_TAS_URL:-http://localhost:8090}"
 
 TAS_TUF_URL="${TAS_TUF_URL:-${MOCK_TAS_URL}/tuf}"
+TAS_FULCIO_URL="${TAS_FULCIO_URL:-${MOCK_TAS_URL}/fulcio}"
+TAS_REKOR_URL="${TAS_REKOR_URL:-${MOCK_TAS_URL}/rekor}"
+TAS_TSA_URL="${TAS_TSA_URL:-${MOCK_TAS_URL}/api/v1/timestamp}"
 TAS_OIDC_ISSUER="${TAS_OIDC_ISSUER:-${MOCK_TAS_URL}/oidc}"
 TAS_OIDC_CLIENT_ID="${TAS_OIDC_CLIENT_ID:-trusted-artifact-signer}"
 TAS_NAMESPACE="${TAS_NAMESPACE:-}"
+
+REGISTRY_USER="${REGISTRY_USER:-robot-user}"
+REGISTRY_PASS="${REGISTRY_PASS:-mock-registry-token}"
 
 # --- Trust TAS server certificates ---
 # Extract and install CA certificate for TLS verification
@@ -113,6 +119,10 @@ mappers = [m for m in mappers if m.get('name') not in ('email','email-verified',
   'service-account-email','service-account-email-verified')]
 mappers.extend([sa_email, sa_email_v])
 client['protocolMappers'] = mappers
+# CRITICAL: Remove 'email' from defaultClientScopes to prevent email_verified=false override
+scopes = client.get('defaultClientScopes', [])
+scopes = [s for s in scopes if s != 'email']
+client['defaultClientScopes'] = scopes
 print(json.dumps({'spec':{'client':client}}))
 ")
       oc patch keycloakclient "${TAS_OIDC_CLIENT_ID}" -n "$KEYCLOAK_NAMESPACE" \
@@ -223,6 +233,10 @@ for c in cr.get('spec', {}).get('realm', {}).get('clients', []):
         c['publicClient'] = False
         c['serviceAccountsEnabled'] = True
         c['secret'] = '${GENERATED_SECRET}'
+        # CRITICAL: Remove 'email' from defaultClientScopes to prevent email_verified=false override
+        scopes = c.get('defaultClientScopes', [])
+        scopes = [s for s in scopes if s != 'email']
+        c['defaultClientScopes'] = scopes
         break
 print(json.dumps(cr['spec']))
 ")
@@ -300,9 +314,12 @@ pipeline {
         REGISTRY = 'ttl.sh'
         IMAGE_NAME = 'tas-test-app'
         IMAGE_TAG = 'brownfield-1h'
-        TAS_TUF_URL = '__TAS_TUF_URL__'
-        TAS_OIDC_ISSUER = '__TAS_OIDC_ISSUER__'
-        TAS_OIDC_CLIENT_ID = '__TAS_OIDC_CLIENT_ID__'
+        TAS_FULCIO_URL = '${TAS_FULCIO_URL}'
+        TAS_REKOR_URL = '${TAS_REKOR_URL}'
+        TAS_TSA_URL = '${TAS_TSA_URL}'
+        TAS_TUF_URL = '${TAS_TUF_URL}'
+        TAS_OIDC_ISSUER = '${TAS_OIDC_ISSUER}'
+        TAS_OIDC_CLIENT_ID = '${TAS_OIDC_CLIENT_ID}'
     }
 
     stages {
@@ -365,8 +382,7 @@ pipeline {
                                   -d "grant_type=client_credentials" \
                                   -d "client_id=${TAS_OIDC_CLIENT_ID}" \
                                   -d "client_secret=${OIDC_CLIENT_SECRET}" \
-                                  | grep -o '"access_token":"[^"]*"' \
-                                  | cut -d'"' -f4
+                                  | jq -r '.access_token'
                             ''',
                             returnStdout: true
                         ).trim()
@@ -420,9 +436,12 @@ pipeline {
 JOBXML
 
 sed -i \
-  -e "s|__TAS_TUF_URL__|${TAS_TUF_URL}|g" \
-  -e "s|__TAS_OIDC_ISSUER__|${TAS_OIDC_ISSUER}|g" \
-  -e "s|__TAS_OIDC_CLIENT_ID__|${TAS_OIDC_CLIENT_ID}|g" \
+  -e "s|\${TAS_FULCIO_URL}|${TAS_FULCIO_URL}|g" \
+  -e "s|\${TAS_REKOR_URL}|${TAS_REKOR_URL}|g" \
+  -e "s|\${TAS_TSA_URL}|${TAS_TSA_URL}|g" \
+  -e "s|\${TAS_TUF_URL}|${TAS_TUF_URL}|g" \
+  -e "s|\${TAS_OIDC_ISSUER}|${TAS_OIDC_ISSUER}|g" \
+  -e "s|\${TAS_OIDC_CLIENT_ID}|${TAS_OIDC_CLIENT_ID}|g" \
   /tmp/tas-container-build-config.xml
 
 echo "Creating pipeline job 'tas-container-build'..."
