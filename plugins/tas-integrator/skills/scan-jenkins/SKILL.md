@@ -142,10 +142,17 @@ If credentials are not provided, try unauthenticated access. On a `403` or
 | `--rekor-url` | Detect Rekor endpoint config |
 | `--oidc-issuer` | Detect OIDC issuer config |
 | `--identity-token` | Detect identity token injection |
+| `--use-signing-config=false` | Detect explicit URL mode (TUF disabled) |
 | `COSIGN_REKOR_URL` | Detect Rekor URL via env var |
 
-4. Store the total pipeline jobs scanned, which patterns matched in which
-   jobs, and whether signing/verification/attestation steps exist.
+4. **Detect current signing-config mode** in existing pipelines:
+   - If `cosign initialize` found AND no `--use-signing-config=false` → **Current mode: TUF**
+   - If `--use-signing-config=false` OR explicit `--fulcio-url`/`--rekor-url` flags without `cosign initialize` → **Current mode: Explicit URLs**
+   - If `cosign sign` found but neither pattern detected → **Current mode: Unknown** (legacy/non-standard)
+   - If no `cosign` commands found → **Current mode: None** (no existing integration)
+
+5. Store the total pipeline jobs scanned, which patterns matched in which
+   jobs, whether signing/verification/attestation steps exist, and the **detected current mode**.
 
 ### Step 4 — Scan Credential Store
 
@@ -422,11 +429,184 @@ See "Non-Keycloak Provider Guidance" section below for templates.
 
 ---
 
+**Mode Selection: TUF Mode vs Explicit URL Mode**
+
+Choose which mode to generate based on existing configuration, TUF availability, and customer preference.
+
+**Priority order (highest to lowest):**
+
+| Priority | Condition | Mode | Reason |
+|----------|-----------|------|--------|
+| 1 | User explicitly asks for `--use-signing-config=false` or "explicit URLs" | **Explicit URL Mode** | Honor user override request |
+| 2 | Existing pipelines use TUF mode (`cosign initialize` detected) | **TUF Mode** | Preserve current configuration |
+| 3 | Existing pipelines use Explicit URL mode (`--use-signing-config=false` detected) | **Explicit URL Mode** | Preserve current configuration |
+| 4 | No existing integration + TUF endpoint detected | **TUF Mode (Recommended)** | Greenfield - use best practice |
+| 5 | No existing integration + TUF NOT detected | **Explicit URL Mode** | TUF unavailable, fallback required |
+
+**Decision Logic:**
+
+1. Check if user explicitly requested explicit URL mode in their query (see detection patterns below)
+   - If yes → **Use Explicit URL Mode** (override everything)
+2. Check `current_mode` from Step 3 pipeline scanning:
+   - If `TUF` → **Use TUF Mode** (preserve existing)
+   - If `Explicit URLs` → **Use Explicit URL Mode** (preserve existing)
+   - If `Unknown` or `None` → Continue to step 3
+3. Check if `tuf_url` was discovered in Step 5:
+   - If yes → **Use TUF Mode** (greenfield recommendation)
+   - If no → **Use Explicit URL Mode** (fallback)
+
+**User Query Detection:** Look for these phrases to detect explicit URL mode override:
+- "use explicit URLs"
+- "without TUF"
+- "--use-signing-config=false"
+- "don't use TUF"
+- "explicit service URLs"
+- "disable signing config"
+
+**Mode Recommendation Output:**
+
+Include a recommendation section in the blueprint that explains the choice and alternatives:
+
+```markdown
+## 🎯 Signing-Config Mode: {{selected_mode}}
+
+**Current Configuration:** {{current_mode_status}}
+**Selected Mode:** {{selected_mode}} ({{selection_reason}})
+
+### Mode Comparison
+
+| Aspect | TUF Mode | Explicit URL Mode |
+|--------|----------|-------------------|
+| **Security** | ✅ Uses TUF for service discovery & root-of-trust | ⚠️ Manual URL configuration, no automatic root updates |
+| **Maintenance** | ✅ Automatic service URL updates via TUF | ⚠️ Manual updates needed when URLs change |
+| **Setup Complexity** | Requires `cosign initialize` once | Simpler - no initialization step |
+| **URL Management** | Hidden in TUF metadata | Explicit in pipeline code |
+| **RHTAS Compatibility** | ✅ Recommended for RHTAS 1.0+ | Compatible with all versions |
+| **Transparency** | Service URLs abstracted | Service URLs visible in pipeline |
+
+### When to Use TUF Mode (Recommended)
+
+✅ **Use TUF Mode if:**
+- TUF service is available and reachable
+- You want automatic root-of-trust updates
+- You prefer centralized service URL management
+- You're following RHTAS deployment best practices
+- **Current status:** {{tuf_recommendation_status}}
+
+### When to Use Explicit URL Mode
+
+✅ **Use Explicit URL Mode if:**
+- TUF service is unavailable or unreachable from Jenkins
+- You need full visibility of service URLs in pipeline code
+- You're migrating from Sigstore Public Good to RHTAS
+- You have compliance requirements for explicit service configuration
+- **Current status:** {{explicit_recommendation_status}}
+
+### Recommendation
+
+{{mode_recommendation_text}}
+```
+
+**Placeholder substitutions:**
+
+| Placeholder | Value |
+|-------------|-------|
+| `{{selected_mode}}` | `TUF Mode` or `Explicit URL Mode` |
+| `{{current_mode_status}}` | `TUF Mode detected in 3 pipelines` / `Explicit URL Mode detected in 2 pipelines` / `No existing integration` / `Unknown configuration` |
+| `{{selection_reason}}` | Why this mode was chosen per priority table |
+| `{{tuf_recommendation_status}}` | `✅ TUF available at {{tuf_url}}` or `❌ TUF not detected` |
+| `{{explicit_recommendation_status}}` | `✅ All service URLs detected` or `⚠️ Some URLs missing - will use placeholders` |
+| `{{mode_recommendation_text}}` | Custom recommendation based on scan results |
+
+**Example recommendations:**
+
+*Scenario 1: TUF available, no existing integration (greenfield)*
+```
+We recommend **TUF Mode** for this greenfield deployment. TUF provides better security 
+and simpler long-term maintenance. Your TUF service at {{tuf_url}} is reachable and 
+healthy.
+
+If you prefer explicit URLs for transparency, re-run with "use explicit URLs" in your request.
+```
+
+*Scenario 2: Existing pipelines use TUF mode*
+```
+Your existing pipelines already use **TUF Mode** (detected `cosign initialize` in 3 
+pipelines). This blueprint preserves that configuration for consistency.
+
+To migrate to Explicit URL Mode, re-run with "use explicit URLs" in your request.
+```
+
+*Scenario 3: TUF unavailable (forced explicit mode)*
+```
+**TUF Mode is recommended** but your TUF service is currently unreachable from Jenkins. 
+This blueprint uses **Explicit URL Mode** as a fallback.
+
+Once TUF connectivity is established, consider migrating to TUF Mode for better security 
+and easier maintenance.
+```
+
+*Scenario 4: User explicitly requested explicit URLs*
+```
+Using **Explicit URL Mode** per your request. All service URLs will be explicitly 
+configured in pipeline environment variables.
+
+TUF Mode is available ({{tuf_url}}) if you prefer centralized service management in the future.
+```
+
+---
+
+**Initialize TUF Stage (TUF Mode Only):**
+
+Generate the TUF initialization stage that runs once before signing. This stage
+extracts the TAS server CA certificate and initializes cosign with the TUF root,
+enabling TUF mode for all subsequent `cosign` commands.
+
+```groovy
+stage('Initialize TUF') {
+    steps {
+        echo 'Initializing TUF for TAS...'
+        sh '''
+            # Remove any cached sigstore config
+            rm -rf /var/jenkins_home/.sigstore || true
+
+            # Extract TAS server CA certificate for TLS verification
+            TAS_HOST=$(echo "${TAS_TUF_URL}" | sed 's|^https://||' | cut -d/ -f1)
+            echo | openssl s_client -showcerts -connect "${TAS_HOST}:443" 2>/dev/null \
+                | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > /tmp/tuf-ca.crt
+
+            # Set CA cert for TUF initialization
+            export SSL_CERT_FILE=/tmp/tuf-ca.crt
+            export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+
+            # Initialize TUF
+            ROOT_CHECKSUM=$(curl -s "${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
+            cosign initialize \
+                --mirror="${TAS_TUF_URL}" \
+                --root="${TAS_TUF_URL}/1.root.json" \
+                --root-checksum="${ROOT_CHECKSUM}"
+
+            echo "TUF initialized successfully"
+        '''
+    }
+}
+```
+
+**CRITICAL:** After `cosign initialize`, TUF mode is enabled (`--use-signing-config=true`
+by default). All subsequent `cosign sign`, `cosign attest`, and `cosign verify` commands
+automatically use TUF-provided service URLs. Do NOT pass explicit URL flags like
+`--fulcio-url`, `--rekor-url`, or `--oidc-issuer` as they conflict with TUF mode and
+cause "cannot specify service URLs and use signing config" errors with Red Hat cosign 3.x.
+
+---
+
 **Keycloak Signing Stage Snippets:**
 
-Generate the signing stage with conditional token acquisition for Keycloak providers:
+Generate the signing stage with conditional token acquisition for Keycloak providers.
 
-**For confidential clients:**
+**CRITICAL:** Use TUF mode (no explicit URL flags) per `redhat-cosign-tuf-patterns.md`.
+
+**For confidential clients (TUF mode):**
 
 ```groovy
 stage('Sign Image') {
@@ -435,6 +615,8 @@ stage('Sign Image') {
             script {
                 def IDENTITY_TOKEN = sh(
                     script: """
+                        export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                        export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
                         curl -s -X POST \
                           "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
                           -d "grant_type=client_credentials" \
@@ -446,20 +628,13 @@ stage('Sign Image') {
                 ).trim()
 
                 sh """
-                    ROOT_CHECKSUM=\$(curl -s "\${TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
-                    cosign initialize \
-                      --mirror="\${TUF_URL}" \
-                      --root="\${TUF_URL}/1.root.json" \
-                      --root-checksum="\$ROOT_CHECKSUM"
-
-                    cosign sign \
-                      --fulcio-url=\${FULCIO_URL} \
-                      --rekor-url=\${REKOR_URL} \
-                      --oidc-issuer=\${OIDC_ISSUER} \
-                      --oidc-client-id=\${OIDC_CLIENT_ID} \
-                      --identity-token=${IDENTITY_TOKEN} \
-                      --yes \
-                      \${IMAGE_REFERENCE}
+                    export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                    export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+                    export COSIGN_YES=true
+                    export COSIGN_OIDC_CLIENT_ID=\${OIDC_CLIENT_ID}
+                    export SIGSTORE_ID_TOKEN=${IDENTITY_TOKEN}
+                    
+                    cosign sign \${IMAGE_REFERENCE}
                 """
             }
         }
@@ -467,7 +642,7 @@ stage('Sign Image') {
 }
 ```
 
-**For public clients:**
+**For public clients (TUF mode):**
 
 ```groovy
 stage('Sign Image') {
@@ -480,6 +655,8 @@ stage('Sign Image') {
             script {
                 def IDENTITY_TOKEN = sh(
                     script: """
+                        export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                        export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
                         curl -s -X POST \
                           "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
                           -d "grant_type=password" \
@@ -493,20 +670,13 @@ stage('Sign Image') {
                 ).trim()
 
                 sh """
-                    ROOT_CHECKSUM=\$(curl -s "\${TUF_URL}/1.root.json" | sha256sum | awk '{print \$1}')
-                    cosign initialize \
-                      --mirror="\${TUF_URL}" \
-                      --root="\${TUF_URL}/1.root.json" \
-                      --root-checksum="\$ROOT_CHECKSUM"
-
-                    cosign sign \
-                      --fulcio-url=\${FULCIO_URL} \
-                      --rekor-url=\${REKOR_URL} \
-                      --oidc-issuer=\${OIDC_ISSUER} \
-                      --oidc-client-id=\${OIDC_CLIENT_ID} \
-                      --identity-token=${IDENTITY_TOKEN} \
-                      --yes \
-                      \${IMAGE_REFERENCE}
+                    export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                    export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+                    export COSIGN_YES=true
+                    export COSIGN_OIDC_CLIENT_ID=\${OIDC_CLIENT_ID}
+                    export SIGSTORE_ID_TOKEN=${IDENTITY_TOKEN}
+                    
+                    cosign sign \${IMAGE_REFERENCE}
                 """
             }
         }
@@ -518,14 +688,24 @@ stage('Sign Image') {
 headers indicating which one applies based on the detected client type. If client
 type is `unknown`, default to the public client snippet with a warning note.
 
-Generate the verification stage — run `cosign verify` with certificate identity:
+**Important:** The Initialize TUF stage (from Step 8b) runs once before signing and
+sets up the signing config. After `cosign initialize`, all subsequent `cosign sign`,
+`cosign attest`, and `cosign verify` commands automatically use TUF-provided service
+URLs via `--use-signing-config=true` (the default). Do NOT pass explicit URL flags
+like `--fulcio-url`, `--rekor-url`, or `--oidc-issuer` as they conflict with TUF mode.
+
+Generate the verification stage — run `cosign verify` with certificate identity.
+
+**TUF mode (after `cosign initialize`):** Use only certificate flags, no URL flags:
 
 ```groovy
 stage('Verify Image') {
     steps {
         sh """
+            export SSL_CERT_FILE=/tmp/tuf-ca.crt
+            export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+            
             cosign verify \
-              --rekor-url=\${REKOR_URL} \
               --certificate-identity=\${EXPECTED_IDENTITY} \
               --certificate-oidc-issuer=\${OIDC_ISSUER} \
               \${IMAGE_REFERENCE}
@@ -534,10 +714,9 @@ stage('Verify Image') {
 }
 ```
 
-Generate the attestation stage — run `cosign attest` with SBOM predicates.
-Use the same conditional token acquisition pattern as the signing stage:
+Generate the attestation stage — run `cosign attest` with SBOM predicates (TUF mode).
 
-**For confidential clients:**
+**For confidential clients (TUF mode):**
 
 ```groovy
 stage('Attest Image') {
@@ -546,6 +725,8 @@ stage('Attest Image') {
             script {
                 def IDENTITY_TOKEN = sh(
                     script: """
+                        export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                        export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
                         curl -s -X POST \
                           "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
                           -d "grant_type=client_credentials" \
@@ -557,15 +738,15 @@ stage('Attest Image') {
                 ).trim()
 
                 sh """
+                    export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                    export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+                    export COSIGN_YES=true
+                    export COSIGN_OIDC_CLIENT_ID=\${OIDC_CLIENT_ID}
+                    export SIGSTORE_ID_TOKEN=${IDENTITY_TOKEN}
+                    
                     cosign attest \
-                      --fulcio-url=\${FULCIO_URL} \
-                      --rekor-url=\${REKOR_URL} \
-                      --oidc-issuer=\${OIDC_ISSUER} \
-                      --oidc-client-id=\${OIDC_CLIENT_ID} \
-                      --identity-token=${IDENTITY_TOKEN} \
                       --predicate=\${SBOM_FILE} \
                       --type=spdxjson \
-                      --yes \
                       \${IMAGE_REFERENCE}
                 """
             }
@@ -616,6 +797,161 @@ stage('Attest Image') {
     }
 }
 ```
+
+---
+
+**Explicit URL Mode Snippets (when TUF not available or customer requests it):**
+
+If TUF is not available or customer explicitly requests `--use-signing-config=false`,
+generate these snippets instead (no `cosign initialize`, explicit URL flags with
+`--use-signing-config=false`).
+
+**Note:** Even without TUF, you still need to extract and trust the TAS server CA
+certificate for HTTPS calls. Add this to the beginning of the Sign stage or as a
+separate preparation stage:
+
+```groovy
+stage('Prepare TAS CA Certificate') {
+    steps {
+        echo 'Extracting TAS server CA certificate for TLS verification...'
+        sh '''
+            # Extract CA certificate from any TAS endpoint
+            TAS_HOST=$(echo "${TAS_FULCIO_URL}" | sed 's|^https://||' | cut -d/ -f1)
+            echo | openssl s_client -showcerts -connect "${TAS_HOST}:443" 2>/dev/null \
+                | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > /tmp/tuf-ca.crt
+        '''
+    }
+}
+```
+
+**For confidential clients (Explicit URL mode):**
+
+```groovy
+stage('Sign Image') {
+    steps {
+        withCredentials([string(credentialsId: 'oidc-client-secret', variable: 'OIDC_CLIENT_SECRET')]) {
+            script {
+                def IDENTITY_TOKEN = sh(
+                    script: """
+                        export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                        export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+                        curl -s -X POST \
+                          "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                          -d "grant_type=client_credentials" \
+                          -d "client_id=\${OIDC_CLIENT_ID}" \
+                          -d "client_secret=\${OIDC_CLIENT_SECRET}" \
+                          | jq -r '.access_token'
+                    """,
+                    returnStdout: true
+                ).trim()
+
+                sh """
+                    export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                    export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+                    
+                    cosign sign \
+                      --use-signing-config=false \
+                      --fulcio-url=\${TAS_FULCIO_URL} \
+                      --rekor-url=\${TAS_REKOR_URL} \
+                      --oidc-issuer=\${TAS_OIDC_ISSUER} \
+                      --oidc-client-id=\${OIDC_CLIENT_ID} \
+                      --identity-token=${IDENTITY_TOKEN} \
+                      --yes \
+                      \${IMAGE_REFERENCE}
+                """
+            }
+        }
+    }
+}
+```
+
+**For public clients (Explicit URL mode):**
+
+```groovy
+stage('Sign Image') {
+    steps {
+        withCredentials([
+            usernamePassword(credentialsId: 'oidc-user-credentials', 
+                           usernameVariable: 'OIDC_USER', 
+                           passwordVariable: 'OIDC_PASSWORD')
+        ]) {
+            script {
+                def IDENTITY_TOKEN = sh(
+                    script: """
+                        export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                        export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+                        curl -s -X POST \
+                          "\${TAS_OIDC_ISSUER}/protocol/openid-connect/token" \
+                          -d "grant_type=password" \
+                          -d "client_id=\${OIDC_CLIENT_ID}" \
+                          -d "username=\${OIDC_USER}" \
+                          -d "password=\${OIDC_PASSWORD}" \
+                          -d "scope=openid email" \
+                          | jq -r '.access_token'
+                    """,
+                    returnStdout: true
+                ).trim()
+
+                sh """
+                    export SSL_CERT_FILE=/tmp/tuf-ca.crt
+                    export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+                    
+                    cosign sign \
+                      --use-signing-config=false \
+                      --fulcio-url=\${TAS_FULCIO_URL} \
+                      --rekor-url=\${TAS_REKOR_URL} \
+                      --oidc-issuer=\${TAS_OIDC_ISSUER} \
+                      --oidc-client-id=\${OIDC_CLIENT_ID} \
+                      --identity-token=${IDENTITY_TOKEN} \
+                      --yes \
+                      \${IMAGE_REFERENCE}
+                """
+            }
+        }
+    }
+}
+```
+
+**Verify stage (Explicit URL mode):**
+
+```groovy
+stage('Verify Image') {
+    steps {
+        sh """
+            export SSL_CERT_FILE=/tmp/tuf-ca.crt
+            export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
+            
+            cosign verify \
+              --use-signing-config=false \
+              --rekor-url=\${TAS_REKOR_URL} \
+              --certificate-identity=\${EXPECTED_IDENTITY} \
+              --certificate-oidc-issuer=\${TAS_OIDC_ISSUER} \
+              \${IMAGE_REFERENCE}
+        """
+    }
+}
+```
+
+**Attest stage (Explicit URL mode):**
+
+Follow the same pattern as Sign stage, but replace `cosign sign` with:
+
+```bash
+cosign attest \
+  --use-signing-config=false \
+  --fulcio-url=\${TAS_FULCIO_URL} \
+  --rekor-url=\${TAS_REKOR_URL} \
+  --oidc-issuer=\${TAS_OIDC_ISSUER} \
+  --oidc-client-id=\${OIDC_CLIENT_ID} \
+  --identity-token=${IDENTITY_TOKEN} \
+  --predicate=\${SBOM_FILE} \
+  --type=spdxjson \
+  --yes \
+  \${IMAGE_REFERENCE}
+```
+
+**Note:** Explicit URL mode requires setting all service URLs as environment variables
+in the pipeline (TAS_FULCIO_URL, TAS_REKOR_URL, TAS_TSA_URL, TAS_OIDC_ISSUER).
 
 ---
 
@@ -860,6 +1196,7 @@ Read these knowledge-base files during scanning:
 | File | Read to |
 |------|---------|
 | [`shared/knowledge-base/gap-detection-rules.md`](../../shared/knowledge-base/gap-detection-rules.md) | Evaluate all 25 gap checks across 6 categories |
+| [`shared/knowledge-base/redhat-cosign-tuf-patterns.md`](../../shared/knowledge-base/redhat-cosign-tuf-patterns.md) | **CRITICAL:** Choose between TUF mode vs explicit URL mode for Red Hat cosign 3.x to avoid "cannot specify service URLs and use signing config" errors |
 | [`shared/knowledge-base/cosign-signing-patterns.md`](../../shared/knowledge-base/cosign-signing-patterns.md) | Generate Jenkinsfile snippets with correct `cosign` CLI flags |
 | [`shared/knowledge-base/tas-endpoint-config.md`](../../shared/knowledge-base/tas-endpoint-config.md) | Map endpoint URLs, run health checks, and set CI/CD variables |
 | [`shared/knowledge-base/oidc-setup.md`](../../shared/knowledge-base/oidc-setup.md) | Configure OIDC issuer, Keycloak integration, and Jenkins token injection |
