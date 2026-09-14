@@ -16,7 +16,15 @@ Red Hat cosign 3.x enforces strict separation between two modes:
 | **TUF Mode** | Uses TUF metadata for service URLs | Private TAS deployments (recommended) |
 | **Explicit URL Mode** | All service URLs via CLI flags | No TUF available / public Sigstore |
 
-**Critical Rule:** You CANNOT mix TUF configuration with explicit service URL flags.
+**Critical Rule:** Do not mix TUF configuration with explicit service URL
+flags unless the command explicitly opts out with
+`--use-signing-config=false`.
+
+**Explicit opt-out:** A command that includes `--use-signing-config=false`
+explicitly disables the active signing config for that command. It may then
+use explicit `--fulcio-url`, `--rekor-url`, and `--oidc-issuer` flags, even if
+`cosign initialize` ran earlier in the workspace. Scanners should classify that
+command as Explicit URL Mode, not as a mixed-mode error.
 
 ## Error: "cannot specify service URLs and use signing config"
 
@@ -187,7 +195,7 @@ sh """
 ### Indicators of Explicit URL Mode
 
 **Pipeline contains:**
-- NO `cosign initialize` command
+- `--use-signing-config=false` on the signing/attestation/verification command
 - `--fulcio-url` and `--rekor-url` flags in sign/attest
 - `--identity-token` flag (not env var)
 - `--oidc-issuer` flag
