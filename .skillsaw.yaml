@@ -4,5 +4,5 @@ rules:
   context-budget:
     limits:
       skill:
-        warn: 8000
-        error: 16000
+        warn: 5000
+        error: 6000

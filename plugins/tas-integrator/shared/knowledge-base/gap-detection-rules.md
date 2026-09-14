@@ -224,15 +224,15 @@ guidance.
 | Pass Condition | OIDC issuer constraint present and matches signing issuer |
 | Remediation | Add `--certificate-oidc-issuer={{oidc_issuer}}` to cosign verify |
 
-### VERIFY-004: Private Infrastructure Flag Set
+### VERIFY-004: RHTAS Verification Trust Configuration
 
 | Field | Value |
 |-------|-------|
 | Severity | Medium |
-| Description | For private TAS deployments, `--private-infrastructure` should be set to skip public Sigstore trust chain verification |
-| Detection | Check `cosign verify` invocations for `--private-infrastructure` flag |
-| Pass Condition | Flag present when using private TAS (not public Sigstore) |
-| Remediation | Add `--private-infrastructure` for private TAS deployments |
+| Description | Verification must use the RHTAS trust configuration for private TAS rather than relying on public Sigstore defaults |
+| Detection | Check for `cosign initialize`/TUF signing configuration, `--trusted-root` or a trusted bundle, and service/CA configuration appropriate to the detected RHTAS deployment. Treat `--private-infrastructure` as legacy compatibility evidence only, not as the requirement. |
+| Pass Condition | A private TAS verification command uses an initialized RHTAS trust configuration, `--trusted-root`/trusted bundle, or equivalent documented trust material. Mark `skip` when the integration is public Sigstore or verification evidence is unavailable. |
+| Remediation | Initialize Cosign with the RHTAS TUF mirror and verified root, or pass the RHTAS `--trusted-root`/trusted bundle. Do not add `--private-infrastructure` solely because TAS is private; use it only when required by the exact supported legacy Cosign version and document the reduced transparency checks. |
 
 ---
 

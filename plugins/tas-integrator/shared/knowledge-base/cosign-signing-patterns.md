@@ -50,24 +50,29 @@ Signs a container image using `cosign sign`.
 | `--payload` | string | Path to a payload file to sign |
 | `--sign-container-identity` | []string | Override container identity for signing |
 
-### Keyless Signing Pattern (TAS Default)
+### Keyless Signing Pattern (TAS TUF Default)
+
+After `cosign initialize`, let the TUF signing configuration provide the TAS
+service URLs. Do not add explicit service URL flags in this mode.
 
 ```bash
+export COSIGN_OIDC_CLIENT_ID={{oidc_client_id}}
+export SIGSTORE_ID_TOKEN={{identity_token}}
+
 cosign sign \
-  --fulcio-url={{fulcio_url}} \
-  --rekor-url={{rekor_url}} \
-  --oidc-issuer={{oidc_issuer}} \
-  --oidc-client-id={{oidc_client_id}} \
-  --identity-token={{identity_token}} \
-  --tlog-upload=true \
   --yes \
   {{image_reference}}
 ```
 
-### Key-Based Signing Pattern
+### Explicit URL Signing Pattern (Compatibility Mode)
+
+Use this only when TUF is unavailable or the pipeline explicitly opts out of
+the signing configuration. The opt-out is required when an initialized TUF
+configuration is present.
 
 ```bash
 cosign sign \
+  --use-signing-config=false \
   --key={{key_path_or_kms_uri}} \
   --rekor-url={{rekor_url}} \
   --tlog-upload=true \
@@ -75,10 +80,11 @@ cosign sign \
   {{image_reference}}
 ```
 
-### TAS Signing with TSA
+### Explicit URL Keyless Signing with TSA
 
 ```bash
 cosign sign \
+  --use-signing-config=false \
   --fulcio-url={{fulcio_url}} \
   --rekor-url={{rekor_url}} \
   --timestamp-server-url={{tsa_url}} \
@@ -119,10 +125,11 @@ Attaches an attestation to a container image using `cosign attest`.
 | `--bundle` | string | Write Sigstore bundle to file |
 | `--record-creation-timestamp` | bool | Record creation timestamp in bundle |
 
-### Keyless Attestation Pattern
+### Explicit URL Keyless Attestation Pattern
 
 ```bash
 cosign attest \
+  --use-signing-config=false \
   --fulcio-url={{fulcio_url}} \
   --rekor-url={{rekor_url}} \
   --oidc-issuer={{oidc_issuer}} \
@@ -168,7 +175,7 @@ Verifies a signed container image using `cosign verify`.
 | `--insecure-ignore-tlog` | bool | Skip transparency log verification |
 | `--timestamp-certificate-chain` | string | Path to TSA certificate chain for timestamp verification |
 | `--max-workers` | int | Maximum concurrent verification workers |
-| `--private-infrastructure` | bool | Skip tlog/SCT verification for private deployments |
+| `--private-infrastructure` | bool | Legacy compatibility flag that skips tlog/SCT verification; not the default recommendation for private TAS |
 | `--use-signed-timestamps` | bool | Use signed timestamps for verification |
 | `--new-bundle-format` | bool | Expect new Sigstore bundle format (default true) |
 | `--trusted-root` | string | Path to trusted root file |
@@ -176,8 +183,21 @@ Verifies a signed container image using `cosign verify`.
 
 ### Keyless Verification Pattern (TAS)
 
+With TUF initialized, use certificate constraints and let the RHTAS trust
+configuration provide the service endpoints.
+
 ```bash
 cosign verify \
+  --certificate-identity={{expected_identity}} \
+  --certificate-oidc-issuer={{oidc_issuer}} \
+  {{image_reference}}
+```
+
+### Explicit URL Keyless Verification (Compatibility Mode)
+
+```bash
+cosign verify \
+  --use-signing-config=false \
   --rekor-url={{rekor_url}} \
   --certificate-identity={{expected_identity}} \
   --certificate-oidc-issuer={{oidc_issuer}} \
@@ -188,12 +208,20 @@ cosign verify \
 
 ```bash
 cosign verify \
+  --use-signing-config=false \
   --key={{public_key_path}} \
   --rekor-url={{rekor_url}} \
   {{image_reference}}
 ```
 
-### Private Infrastructure Verification
+### Legacy Private Infrastructure Verification
+
+RHTAS does not require this flag when Cosign is initialized with the RHTAS TUF
+trust root or verification uses `--trusted-root`. Prefer those trust
+configurations because they preserve the RHTAS trust chain and transparency
+checks. Use the following only when the exact supported Cosign version and
+deployment require legacy private-infrastructure behavior; record that the
+transparency checks are reduced.
 
 ```bash
 cosign verify \
