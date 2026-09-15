@@ -175,25 +175,18 @@ Record `oidc_provider_type` for use in Step 8b blueprint generation.
 
 **Keycloak Client Type Detection:**
 
-If `oidc_provider_type` is `keycloak`, probe the token endpoint to detect whether
-the client is public or confidential:
+Do not probe the token endpoint. A token request is an active authentication
+attempt and may create audit events, trigger rate limits, or expose a lockout
+path. Infer the client type from documented provider metadata, the accessible
+client configuration, or an operator-provided classification. If that evidence
+is unavailable, record `oidc_client_type: unknown` and ask the operator to
+confirm the supported grant type before generating any token-acquisition
+snippet.
 
-```bash
-PROBE_RESPONSE=$(curl -s -X POST \
-  "{{oidc_issuer}}/protocol/openid-connect/token" \
-  -d "grant_type=client_credentials" \
-  -d "client_id={{oidc_client_id}}" \
-  2>&1)
-```
-
-Classify the client type based on the error response:
-
-| Response Pattern | Client Type |
-|------------------|-------------|
-| Error contains `"public client"` or `"service account"` | `public` |
-| Error contains `"client secret"` or `"invalid credentials"` or `"unauthorized_client"` | `confidential` |
-| HTTP 200 (token returned) | `confidential` |
-| Unreachable or ambiguous | `unknown` (default to `public`) |
+Classify the client type only from confirmed metadata. A documented service
+account/client secret indicates `confidential`; a documented public client
+indicates `public`; absent authoritative evidence, use `unknown` and do not
+default to an executable grant type.
 
 Record `oidc_client_type` as `public`, `confidential`, or `unknown`.
 

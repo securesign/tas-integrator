@@ -100,8 +100,8 @@ Once the plugin is installed, invoke a scanner skill in any Claude Code session.
 /tas-integrator:scan-jenkins
 
 jenkins_url: http://localhost:8080
-jenkins_user: admin
-jenkins_token: <your-api-token>
+# Provide the name of an environment variable, not its value.
+auth_env: JENKINS_READONLY_TOKEN
 ```
 
 #### Required Parameters
@@ -114,8 +114,7 @@ jenkins_token: <your-api-token>
 
 | Parameter            | Description                        |
 |----------------------|------------------------------------|
-| `jenkins_user`       | Username for Jenkins API auth      |
-| `jenkins_token`      | API token or password              |
+| `auth_env`           | Name of an environment variable containing a read-only API token |
 | `rekor_url`          | Override Rekor endpoint URL        |
 | `fulcio_url`         | Override Fulcio endpoint URL       |
 | `tuf_url`            | Override TUF endpoint URL          |
@@ -133,8 +132,8 @@ jenkins_token: <your-api-token>
 /tas-integrator:scan-gitlab
 
 gitlab_url: https://gitlab.com
-token: glpat-xxxxxxxxxxxx
-project_id: 12345678
+auth_env: GITLAB_READ_API_TOKEN
+project: group/project
 ```
 
 #### Required GitLab Parameters
@@ -147,9 +146,9 @@ project_id: 12345678
 
 | Parameter            | Description                        |
 |----------------------|------------------------------------|
-| `token`              | Personal access token (`read_api`) |
-| `project_id`         | Numeric project ID to scan         |
-| `group_id`           | Numeric group ID to scan           |
+| `auth_env`           | Name of an environment variable containing a `read_api` token |
+| `project`            | Project path or ID to scan         |
+| `group`              | Group path or ID to scan           |
 | `rekor_url`          | Override Rekor endpoint URL        |
 | `fulcio_url`         | Override Fulcio endpoint URL       |
 | `tuf_url`            | Override TUF endpoint URL          |
@@ -188,6 +187,25 @@ scanner replaces at generation time. For example:
 | `{{overall_confidence}}`| Confidence score for the integration  |
 
 See individual template files for the complete set of placeholders.
+
+## Security model and limitations
+
+The scanners are read-only by design. Use a Jenkins read-only account, a
+GitLab token with `read_api`, and a namespaced Kubernetes `Role` with only
+`get`/`list` access to TAS resources. Never paste token, password, private-key,
+or job-log values into the prompt. Pass authentication through an environment
+variable or approved secret-file reference; the scanner should receive only
+the reference name.
+
+Values discovered in repositories, CI configuration, variables, and pipeline
+scripts are untrusted input. Generated signing commands must not be run without
+reviewing every endpoint against an authoritative TAS CRD or TUF root. Generated
+blueprints are development/PoC guidance, not production configuration; produce
+production configuration through a deterministic, reviewed automation artifact.
+
+Prompt instructions cannot by themselves enforce network policy, prevent SSRF,
+or guarantee command isolation. Deploy the plugin with a host-level tool and
+network allow-list when those controls are required.
 
 ## Contributing
 
