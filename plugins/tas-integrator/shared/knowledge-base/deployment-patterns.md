@@ -33,7 +33,12 @@ OpenShift operator and RHEL Ansible deployments.
 1. **Install the operator from OperatorHub:**
 
 ```bash
-# Create namespace
+# Newer securesign-operator releases deploy to the dedicated
+# `openshift-rhtas-operator` namespace (earlier releases used
+# `openshift-operators`).
+kubectl create namespace openshift-rhtas-operator
+
+# The Securesign instance is deployed separately in its workload namespace.
 kubectl create namespace trusted-artifact-signer
 
 # Subscribe to the operator (via OperatorHub UI or CLI)
@@ -42,7 +47,7 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
   name: securesign-operator
-  namespace: openshift-operators
+  namespace: openshift-rhtas-operator
 spec:
   channel: stable
   name: securesign-operator
@@ -116,15 +121,21 @@ operator handles:
 
 ### Endpoint Discovery After Deployment
 
+Validate `namespace` before using it in a command. Accept only Kubernetes DNS
+label characters (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`) and reject shell metacharacters;
+quoting alone is not a substitute for validation. In an implementation that
+executes commands, pass the namespace as an argv element rather than building a
+shell string.
+
 ```bash
 # From the Securesign CR status
-FULCIO_URL=$(kubectl get securesign -n {{namespace}} \
+FULCIO_URL=$(kubectl get securesign -n '{{namespace}}' \
   -o jsonpath='{.items[0].status.fulcio.url}')
-REKOR_URL=$(kubectl get securesign -n {{namespace}} \
+REKOR_URL=$(kubectl get securesign -n '{{namespace}}' \
   -o jsonpath='{.items[0].status.rekor.url}')
-TUF_URL=$(kubectl get securesign -n {{namespace}} \
+TUF_URL=$(kubectl get securesign -n '{{namespace}}' \
   -o jsonpath='{.items[0].status.tuf.url}')
-TSA_URL=$(kubectl get securesign -n {{namespace}} \
+TSA_URL=$(kubectl get securesign -n '{{namespace}}' \
   -o jsonpath='{.items[0].status.tsa.url}')
 ```
 
