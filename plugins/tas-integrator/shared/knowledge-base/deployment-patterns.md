@@ -33,7 +33,12 @@ OpenShift operator and RHEL Ansible deployments.
 1. **Install the operator from OperatorHub:**
 
 ```bash
-# Create namespace
+# Newer securesign-operator releases deploy to the dedicated
+# `openshift-rhtas-operator` namespace (earlier releases used
+# `openshift-operators`).
+kubectl create namespace openshift-rhtas-operator
+
+# The Securesign instance is deployed separately in its workload namespace.
 kubectl create namespace trusted-artifact-signer
 
 # Subscribe to the operator (via OperatorHub UI or CLI)
@@ -42,7 +47,7 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
   name: securesign-operator
-  namespace: openshift-operators
+  namespace: openshift-rhtas-operator
 spec:
   channel: stable
   name: securesign-operator
