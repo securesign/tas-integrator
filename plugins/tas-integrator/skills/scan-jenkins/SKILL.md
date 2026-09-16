@@ -54,6 +54,7 @@ the other configured discovery sources. Before connecting, ask for the missing
 | `tsa_url` | auto-detect | Override TSA endpoint URL |
 | `oidc_issuer` | auto-detect | Override OIDC issuer URL |
 | `oidc_client_id` | auto-detect | Override OIDC client ID |
+| `jenkins_user` | — | Jenkins username paired with the API token in `auth_env` |
 | `auth_env` | — | Name of an environment variable containing a read-only API token |
 | `auth_file` | — | Approved secret-file reference; never include file contents |
 | `job_pattern` | all | Limit the scan to matching jobs |
