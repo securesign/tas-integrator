@@ -113,8 +113,12 @@ reference instead.
 /tas-integrator:scan-jenkins
 
 jenkins_url: http://localhost:8080
+# Jenkins username paired with the API token.
+jenkins_user: admin
 # Provide the name of an environment variable, not its value.
 auth_env: JENKINS_READONLY_TOKEN
+# If a TAS deployment is available, provide its namespace for auto-detection.
+namespace: openshift-rhtas-operator
 ```
 
 #### Required Parameters
@@ -128,13 +132,14 @@ auth_env: JENKINS_READONLY_TOKEN
 | Parameter            | Description                        |
 |----------------------|------------------------------------|
 | `auth_env`           | Name of an environment variable containing a read-only API token |
+| `jenkins_user`       | Jenkins username paired with the API token in `auth_env` |
 | `rekor_url`          | Override Rekor endpoint URL        |
 | `fulcio_url`         | Override Fulcio endpoint URL       |
 | `tuf_url`            | Override TUF endpoint URL          |
 | `tsa_url`            | Override TSA endpoint URL          |
 | `oidc_issuer`        | Override OIDC issuer               |
 | `oidc_client_id`     | Override OIDC client ID            |
-| `namespace`          | K8s namespace for TAS auto-detect  |
+| `namespace`          | Namespace containing the TAS deployment, e.g. `openshift-rhtas-operator` |
 | `output`             | `display` (default), `save`, `both`|
 | `format`             | `markdown` (default) or `yaml`     |
 | `output_path`        | File path for `save` or `both`     |
@@ -147,6 +152,8 @@ auth_env: JENKINS_READONLY_TOKEN
 gitlab_url: https://gitlab.com
 auth_env: GITLAB_READ_API_TOKEN
 project: group/project
+# If a TAS deployment is available, provide its namespace for auto-detection.
+namespace: openshift-rhtas-operator
 ```
 
 #### Required GitLab Parameters
@@ -168,7 +175,7 @@ project: group/project
 | `tsa_url`            | Override TSA endpoint URL          |
 | `oidc_issuer`        | Override OIDC issuer               |
 | `oidc_client_id`     | Override OIDC client ID            |
-| `namespace`          | K8s namespace for TAS auto-detect  |
+| `namespace`          | Namespace containing the TAS deployment, e.g. `openshift-rhtas-operator` |
 | `output`             | `display` (default), `save`, `both`|
 | `format`             | `markdown` (default) or `yaml`     |
 | `output_path`        | File path for `save` or `both`     |
