@@ -94,6 +94,19 @@ automatically on every session, add the path to your
 
 Once the plugin is installed, invoke a scanner skill in any Claude Code session.
 
+### Authentication
+
+`auth_env` is the environment variable name containing the read-only API token,
+not the token value. Set the variable before starting Claude Code:
+
+```bash
+export GITLAB_READ_API_TOKEN="<read_api-token>"
+```
+
+Then use `auth_env: GITLAB_READ_API_TOKEN` in the scanner prompt. Never put the
+token value in the prompt. Use `auth_file` to provide an approved secret-file
+reference instead.
+
 ### Jenkins
 
 ```bash
