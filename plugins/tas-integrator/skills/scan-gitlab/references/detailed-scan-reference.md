@@ -350,15 +350,16 @@ sign-image:
       aud: trusted-artifact-signer
   variables:
     TUF_URL: ${TAS_TUF_URL}
+    TAS_TUF_ROOT_CHECKSUM: ${TAS_TUF_ROOT_CHECKSUM}
     FULCIO_URL: ${TAS_FULCIO_URL}
     REKOR_URL: ${TAS_REKOR_URL}
     OIDC_ISSUER: ${TAS_OIDC_ISSUER}
   script:
-    - export ROOT_CHECKSUM=$(curl -s "${TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
+    - ': "${TAS_TUF_ROOT_CHECKSUM:?Set the pinned TAS_TUF_ROOT_CHECKSUM CI/CD variable}"'
     - cosign initialize
         --mirror="${TUF_URL}"
         --root="${TUF_URL}/1.root.json"
-        --root-checksum="${ROOT_CHECKSUM}"
+        --root-checksum="${TAS_TUF_ROOT_CHECKSUM}"
     - cosign sign
         --fulcio-url=${FULCIO_URL}
         --rekor-url=${REKOR_URL}

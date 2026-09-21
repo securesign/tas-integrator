@@ -409,11 +409,11 @@ stage('Initialize TUF') {
             export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
 
             # Initialize TUF
-            ROOT_CHECKSUM=$(curl -s "${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
+            : "${TAS_TUF_ROOT_CHECKSUM:?Set the pinned TAS_TUF_ROOT_CHECKSUM CI/CD variable}"
             cosign initialize \
                 --mirror="${TAS_TUF_URL}" \
                 --root="${TAS_TUF_URL}/1.root.json" \
-                --root-checksum="${ROOT_CHECKSUM}"
+                --root-checksum="${TAS_TUF_ROOT_CHECKSUM}"
 
             echo "TUF initialized successfully"
         '''

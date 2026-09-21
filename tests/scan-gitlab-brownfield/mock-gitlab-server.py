@@ -25,6 +25,7 @@ variables:
   TAS_FULCIO_URL: "${TAS_FULCIO_URL}"
   TAS_REKOR_URL: "${TAS_REKOR_URL}"
   TAS_TUF_URL: "${TAS_TUF_URL}"
+  TAS_TUF_ROOT_CHECKSUM: "${TAS_TUF_ROOT_CHECKSUM}"
   TAS_TSA_URL: "${TAS_TSA_URL}"
   TAS_OIDC_ISSUER: "${TAS_OIDC_ISSUER}"
   COSIGN_REKOR_URL: "${TAS_REKOR_URL}"
@@ -46,11 +47,11 @@ sign-image:
     SIGSTORE_ID_TOKEN:
       aud: trusted-artifact-signer
   script:
-    - export ROOT_CHECKSUM=$(curl -s "${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
+    - ': "${TAS_TUF_ROOT_CHECKSUM:?Set the pinned TAS_TUF_ROOT_CHECKSUM CI/CD variable}"'
     - cosign initialize
         --mirror="${TAS_TUF_URL}"
         --root="${TAS_TUF_URL}/1.root.json"
-        --root-checksum="${ROOT_CHECKSUM}"
+        --root-checksum="${TAS_TUF_ROOT_CHECKSUM}"
     - cosign sign
         --fulcio-url=${TAS_FULCIO_URL}
         --rekor-url=${TAS_REKOR_URL}
@@ -90,6 +91,10 @@ VARIABLES = [
      "variable_type": "env_var", "protected": False, "masked": False,
      "environment_scope": "*"},
     {"key": "TAS_TUF_URL", "value": f"{MOCK_TAS_URL}/tuf",
+     "variable_type": "env_var", "protected": False, "masked": False,
+     "environment_scope": "*"},
+    {"key": "TAS_TUF_ROOT_CHECKSUM",
+     "value": "502b83c4ce9fb20b888d6b006a57ad5b64c0a101a1ba75bf55f7ea508cecfc95",
      "variable_type": "env_var", "protected": False, "masked": False,
      "environment_scope": "*"},
     {"key": "TAS_TSA_URL", "value": f"{MOCK_TAS_URL}/api/v1/timestamp",

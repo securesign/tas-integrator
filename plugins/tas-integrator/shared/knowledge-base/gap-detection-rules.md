@@ -178,7 +178,7 @@ guidance.
 | Description | Cosign must be initialized with the TAS TUF root before signing |
 | Detection | Search for `cosign initialize` command with `--mirror` and `--root` flags |
 | Pass Condition | TUF initialization step present before signing step |
-| Remediation | Add `ROOT_CHECKSUM=$(curl -s "{{tuf_url}}/1.root.json" \| sha256sum \| awk '{print $1}'); cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/1.root.json --root-checksum=$ROOT_CHECKSUM` before signing |
+| Remediation | Set the pinned `TAS_TUF_ROOT_CHECKSUM` CI/CD variable during trusted setup, then add `: "${TAS_TUF_ROOT_CHECKSUM:?Set the pinned checksum}"; cosign initialize --mirror={{tuf_url}} --root={{tuf_url}}/1.root.json --root-checksum="${TAS_TUF_ROOT_CHECKSUM}"` before signing. Never derive the checksum from the downloaded root in the pipeline. |
 
 ### SIGN-005: Confirmation Prompt Suppressed
 

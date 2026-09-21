@@ -158,23 +158,47 @@ Root metadata: `GET {{tuf_url}}/root.json`
 
 Before signing or verifying against a private TAS instance, cosign must be
 initialized with the TAS TUF root. The `--root-checksum` flag prevents MITM
-attacks during initialization by verifying root.json integrity.
+attacks during initialization by verifying root.json integrity. The checksum is
+a trust anchor and MUST be provided as a pinned CI/CD variable (for example,
+`TAS_TUF_ROOT_CHECKSUM`). Never calculate it from the same network response
+used to initialize cosign.
+
+### One-time checksum setup with the Securesign operator
+
+The Securesign operator exposes the TUF endpoint URL, but does not publish a
+root-checksum field. During initial trusted setup, the helper below may be run
+once from an administrator workstation to calculate the checksum:
 
 ```bash
-# Compute checksum from the versioned root
-ROOT_CHECKSUM=$(curl -s "{{tuf_url}}/1.root.json" | sha256sum | awk '{print $1}')
+# Run this once during trusted setup, never as part of the CI pipeline.
+TAS_TUF_ROOT_CHECKSUM=$(curl --fail --silent --show-error \
+  "${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
+printf 'TAS_TUF_ROOT_CHECKSUM=%s\n' "${TAS_TUF_ROOT_CHECKSUM}"
+```
+
+Verify this value through the deployment's trusted administrative process, for
+example by comparing it with a copy of `1.root.json` retrieved from the
+operator-managed TUF pod, and store it as a CI/CD variable. Repeat the helper
+only when the pinned TUF root is intentionally rotated.
+
+```bash
+# TAS_TUF_ROOT_CHECKSUM must be recorded during trusted setup and updated only
+# when the pinned TUF root is intentionally rotated.
+: "${TAS_TUF_ROOT_CHECKSUM:?Set the pinned TAS_TUF_ROOT_CHECKSUM CI/CD variable}"
 
 # Initialize with checksum verification
 cosign initialize \
   --mirror="{{tuf_url}}" \
   --root="{{tuf_url}}/1.root.json" \
-  --root-checksum="$ROOT_CHECKSUM"
+  --root-checksum="${TAS_TUF_ROOT_CHECKSUM}"
 ```
 
 This configures cosign to trust the TAS instance's Fulcio CA, Rekor public
 key, and CT log key. Using `1.root.json` (version-specific) ensures a stable
 checksum; `root.json` redirects to the latest version and may change between
-rotations.
+rotations. To establish or rotate the pin, retrieve `1.root.json` through a
+separately trusted channel, verify it out of band, and set its SHA-256 as the
+CI/CD variable before running the pipeline.
 
 ---
 
