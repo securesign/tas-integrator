@@ -11,7 +11,7 @@
     {
       "name": "tas-integrator",
       "source": "./plugins/tas-integrator",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "description": "AI-powered environment scanner that detects CI/CD setup and generates Trusted Artifact Signer integration blueprints."
     }
   ]
