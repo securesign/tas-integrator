@@ -94,7 +94,7 @@ else
   fail "Only $TAS_FOUND TAS patterns found (expected >= 7). Missing:$TAS_MISSING"
 fi
 
-ENV_VARS_EXPECTED=("TAS_TUF_URL" "TAS_OIDC_ISSUER" "TAS_OIDC_CLIENT_ID")
+ENV_VARS_EXPECTED=("TAS_TUF_URL" "TAS_TUF_ROOT_CHECKSUM" "TAS_OIDC_ISSUER" "TAS_OIDC_CLIENT_ID")
 ENV_FOUND=0
 for var in "${ENV_VARS_EXPECTED[@]}"; do
   if echo "$CONFIG_XML" | grep -qF -- "$var"; then
@@ -102,10 +102,10 @@ for var in "${ENV_VARS_EXPECTED[@]}"; do
   fi
 done
 
-if [ "$ENV_FOUND" -eq 3 ]; then
+if [ "$ENV_FOUND" -eq "${#ENV_VARS_EXPECTED[@]}" ]; then
   pass "Found $ENV_FOUND/${#ENV_VARS_EXPECTED[@]} TAS environment variables (TUF-based)"
 else
-  fail "Only $ENV_FOUND TAS env vars found (expected 3)"
+  fail "Only $ENV_FOUND TAS env vars found (expected ${#ENV_VARS_EXPECTED[@]})"
 fi
 
 echo ""

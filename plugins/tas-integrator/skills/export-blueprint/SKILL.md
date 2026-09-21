@@ -167,8 +167,8 @@ user can fill them in manually.
 ```markdown
 ### TUF Initialization
 
-ROOT_CHECKSUM=$(curl -s "{{tuf_url}}/1.root.json" | sha256sum | awk '{print $1}')
-cosign initialize --mirror="{{tuf_url}}" --root="{{tuf_url}}/1.root.json" --root-checksum="$ROOT_CHECKSUM"
+: "${TAS_TUF_ROOT_CHECKSUM:?Set the pinned TAS_TUF_ROOT_CHECKSUM CI/CD variable}"
+cosign initialize --mirror="{{tuf_url}}" --root="{{tuf_url}}/1.root.json" --root-checksum="${TAS_TUF_ROOT_CHECKSUM}"
 ```
 
 #### Signing Test

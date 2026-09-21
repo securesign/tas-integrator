@@ -76,12 +76,17 @@ export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
 ### Step 3: Initialize TUF
 
 ```bash
-ROOT_CHECKSUM=$(curl -s "${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
+: "${TAS_TUF_ROOT_CHECKSUM:?Set the pinned TAS_TUF_ROOT_CHECKSUM CI/CD variable}"
 cosign initialize \
   --mirror="${TAS_TUF_URL}" \
   --root="${TAS_TUF_URL}/1.root.json" \
-  --root-checksum="${ROOT_CHECKSUM}"
+  --root-checksum="${TAS_TUF_ROOT_CHECKSUM}"
 ```
+
+`TAS_TUF_ROOT_CHECKSUM` must be calculated once during trusted setup (or when
+the TUF root is intentionally rotated) and stored in the CI/CD environment.
+Do not calculate it from the downloaded root in the pipeline; that would make
+the checksum trust the same response it is meant to verify.
 
 ### Step 4: Sign using environment variables (NO explicit URLs)
 

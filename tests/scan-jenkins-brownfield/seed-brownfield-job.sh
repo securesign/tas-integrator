@@ -23,6 +23,7 @@ JENKINS_PASS="${JENKINS_PASS:-admin123}"
 MOCK_TAS_URL="${MOCK_TAS_URL:-http://localhost:8090}"
 
 TAS_TUF_URL="${TAS_TUF_URL:-${MOCK_TAS_URL}/tuf}"
+TAS_TUF_ROOT_CHECKSUM="${TAS_TUF_ROOT_CHECKSUM:-502b83c4ce9fb20b888d6b006a57ad5b64c0a101a1ba75bf55f7ea508cecfc95}"
 TAS_FULCIO_URL="${TAS_FULCIO_URL:-${MOCK_TAS_URL}/fulcio}"
 TAS_REKOR_URL="${TAS_REKOR_URL:-${MOCK_TAS_URL}/rekor}"
 TAS_TSA_URL="${TAS_TSA_URL:-${MOCK_TAS_URL}/api/v1/timestamp}"
@@ -318,6 +319,7 @@ pipeline {
         TAS_REKOR_URL = '${TAS_REKOR_URL}'
         TAS_TSA_URL = '${TAS_TSA_URL}'
         TAS_TUF_URL = '${TAS_TUF_URL}'
+        TAS_TUF_ROOT_CHECKSUM = '${TAS_TUF_ROOT_CHECKSUM}'
         TAS_OIDC_ISSUER = '${TAS_OIDC_ISSUER}'
         TAS_OIDC_CLIENT_ID = '${TAS_OIDC_CLIENT_ID}'
     }
@@ -358,11 +360,11 @@ pipeline {
                     export CURL_CA_BUNDLE=/tmp/tuf-ca.crt
 
                     # Initialize TUF
-                    ROOT_CHECKSUM=$(curl -s "${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
+                    : "${TAS_TUF_ROOT_CHECKSUM:?Set the pinned TAS_TUF_ROOT_CHECKSUM CI/CD variable}"
                     cosign initialize \
                         --mirror="${TAS_TUF_URL}" \
                         --root="${TAS_TUF_URL}/1.root.json" \
-                        --root-checksum="${ROOT_CHECKSUM}"
+                        --root-checksum="${TAS_TUF_ROOT_CHECKSUM}"
 
                     echo "TUF initialized successfully"
                 '''
@@ -440,6 +442,7 @@ sed -i \
   -e "s|\${TAS_REKOR_URL}|${TAS_REKOR_URL}|g" \
   -e "s|\${TAS_TSA_URL}|${TAS_TSA_URL}|g" \
   -e "s|\${TAS_TUF_URL}|${TAS_TUF_URL}|g" \
+  -e "s|\${TAS_TUF_ROOT_CHECKSUM}|${TAS_TUF_ROOT_CHECKSUM}|g" \
   -e "s|\${TAS_OIDC_ISSUER}|${TAS_OIDC_ISSUER}|g" \
   -e "s|\${TAS_OIDC_CLIENT_ID}|${TAS_OIDC_CLIENT_ID}|g" \
   /tmp/tas-container-build-config.xml
