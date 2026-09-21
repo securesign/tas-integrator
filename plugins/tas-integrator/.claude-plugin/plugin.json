@@ -1,7 +1,7 @@
 {
   "name": "tas-integrator",
   "description": "AI-powered environment scanner that detects CI/CD setup and generates Trusted Artifact Signer integration blueprints.",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "author": {
     "name": "Red Hat Trusted Artifact Signer Team"
   }
