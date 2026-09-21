@@ -166,27 +166,20 @@ used to initialize cosign.
 ### One-time checksum setup with the Securesign operator
 
 The Securesign operator exposes the TUF endpoint URL, but does not publish a
-root-checksum field. For an OpenShift deployment, retrieve the versioned root
-from the operator-managed TUF pod through the Kubernetes API, then calculate
-the checksum locally:
+root-checksum field. During initial trusted setup, the helper below may be run
+once from an administrator workstation to calculate the checksum:
 
 ```bash
-TAS_NAMESPACE="trusted-artifact-signer"
-TUF_POD=$(oc get pods \
-  -l 'app.kubernetes.io/component=tuf,!job-name' \
-  -n "${TAS_NAMESPACE}" \
-  -o jsonpath='{.items[0].metadata.name}')
-
-oc cp "${TUF_POD}:/var/www/html/1.root.json" ./1.root.json \
-  -n "${TAS_NAMESPACE}"
-
-TAS_TUF_ROOT_CHECKSUM=$(sha256sum ./1.root.json | awk '{print $1}')
+# Run this once during trusted setup, never as part of the CI pipeline.
+TAS_TUF_ROOT_CHECKSUM=$(curl --fail --silent --show-error \
+  "${TAS_TUF_URL}/1.root.json" | sha256sum | awk '{print $1}')
 printf 'TAS_TUF_ROOT_CHECKSUM=%s\n' "${TAS_TUF_ROOT_CHECKSUM}"
 ```
 
-Verify this value through the deployment's trusted administrative process and
-store it as a CI/CD variable. Repeat the procedure only when the pinned TUF
-root is intentionally rotated.
+Verify this value through the deployment's trusted administrative process, for
+example by comparing it with a copy of `1.root.json` retrieved from the
+operator-managed TUF pod, and store it as a CI/CD variable. Repeat the helper
+only when the pinned TUF root is intentionally rotated.
 
 ```bash
 # TAS_TUF_ROOT_CHECKSUM must be recorded during trusted setup and updated only
