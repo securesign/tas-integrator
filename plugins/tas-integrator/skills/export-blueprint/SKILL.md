@@ -2,6 +2,7 @@
 name: export-blueprint
 description: |
   Format raw blueprint data from scanner skills into a Markdown or YAML integration blueprint.
+allowed-tools: Read, Write
 ---
 
 # export-blueprint

@@ -120,6 +120,6 @@ echo "=== Step 7: Confidence Scores ==="
 # Greenfield: 0 rules pass -> 0% across all categories -> Low
 pass "Detection confidence: Low (0/10 INFRA+OIDC rules passed)"
 pass "Compatibility confidence: Low (0/9 SIGN+VERIFY rules passed)"
-pass "Overall confidence: Low (0/24 rules passed)"
+pass "Overall confidence: Low (0/25 rules passed)"
 
 report_results

@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin manifest (`.claude-plugin/plugin.json`).
 - README with installation and usage instructions.
 - Shared knowledge base: cosign signing patterns, OIDC setup, TAS endpoint
-  config, deployment patterns, gap detection rules (24 rules across 6
+  config, deployment patterns, gap detection rules (25 rules across 6
   categories).
 - Shared templates: blueprint header, Jenkins blueprint, GitLab CI blueprint.
 - `export-blueprint` skill — renders scanner output into formatted blueprints.
