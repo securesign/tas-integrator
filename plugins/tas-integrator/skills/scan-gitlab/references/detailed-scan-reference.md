@@ -173,7 +173,7 @@ Store pass/fail for each endpoint check.
 
 ### Step 6 — Evaluate Gap Detection Rules
 
-Run all 24 rules from [shared/knowledge-base/gap-detection-rules.md](../../../shared/knowledge-base/gap-detection-rules.md)
+Run all 25 rules from [shared/knowledge-base/gap-detection-rules.md](../../../shared/knowledge-base/gap-detection-rules.md)
 against the data collected in Steps 1–5. Record for each rule:
 
 | Field | Value |
